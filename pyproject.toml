@@ -1,0 +1,57 @@
+[build-system]
+requires = ["maturin>=1.5,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "mary-elizabeth-utils"
+description = "My utilities for the different projects"
+authors = [{ name = "Tobias Kragholm", email = "tkragholm@gmail.com" }]
+license = "MIT"
+readme = "README.md"
+dependencies = ["polars", "matplotlib", "seaborn", "pandas", "numpy"]
+
+[tool.maturin]
+module-name = "mary_elizabeth_utils._mary_elizabeth_utils"
+binding = "pyo3"
+features = ["pyo3/extension-module"]
+
+[tool.mypy]
+check_untyped_defs = true
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = ["tests.*"]
+disallow_untyped_defs = false
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = "--cov=mary_elizabeth_utils --cov-report term-missing --no-cov-on-fail"
+
+[tool.coverage.report]
+exclude_lines = ["if __name__ == .__main__.:", "pragma: no cover"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+fix = true
+
+[tool.ruff.lint]
+select = ["E", "B", "F", "UP", "I001", "T201", "T203"]
+ignore = [
+    # Recommended ignores by ruff when using formatter
+    "E501",
+    "W191",
+    "E111",
+    "E114",
+    "E117",
+    "D206",
+    "D300",
+    "Q000",
+    "Q001",
+    "Q002",
+    "Q003",
+    "COM812",
+    "COM819",
+    "ISC001",
+    "ISC002",
+]

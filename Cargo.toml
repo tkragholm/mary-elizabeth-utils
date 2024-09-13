@@ -1,0 +1,14 @@
+[package]
+name = "mary-elizabeth-utils"
+version = "0.1.0"
+description = "My utilities for the different projects"
+edition = "2021"
+license = "MIT"
+readme = "README.md"
+
+[lib]
+name = "_mary_elizabeth_utils"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.22.2", features = ["extension-module"] }
