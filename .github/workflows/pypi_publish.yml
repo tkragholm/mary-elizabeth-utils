@@ -26,7 +26,7 @@ jobs:
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
-          name: wheels
+          name: wheels-linux-${{ matrix.target }}
           path: dist
 
   windows:
@@ -49,7 +49,7 @@ jobs:
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
-          name: wheels
+          name: wheels-windows-${{ matrix.target }}
           path: dist
 
   macos:
@@ -71,7 +71,7 @@ jobs:
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
-          name: wheels
+          name: wheels-macos-${{ matrix.target }}
           path: dist
 
   sdist:
@@ -86,7 +86,7 @@ jobs:
       - name: Upload sdist
         uses: actions/upload-artifact@v4
         with:
-          name: wheels
+          name: sdist
           path: dist
 
   release:
@@ -96,14 +96,11 @@ jobs:
     needs: [linux, windows, macos, sdist]
     steps:
       - uses: actions/checkout@v4
-      - name: Check directory contents
-        run: |
-          pwd
-          ls -la
+      - name: Create dist directory
+        run: mkdir -p dist
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
-          name: wheels
           path: dist
       - name: Display structure of downloaded files
         run: ls -R dist
