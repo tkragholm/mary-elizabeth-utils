@@ -3,7 +3,7 @@ name: Testing
 on:
   push:
     branches:
-    - main
+      - main
   pull_request:
 env:
   CARGO_TERM_COLOR: always
@@ -14,48 +14,49 @@ jobs:
     name: Clippy
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
-    - name: Install Rust
-      run: |
-        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-    - name: Cache dependencies
-      uses: Swatinem/rust-cache@v2.6.2
-    - name: Run cargo clippy
-      run: cargo clippy --all-targets -- --deny warnings
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v2.6.2
+      - name: Run cargo clippy
+        run: cargo clippy --all-targets -- --deny warnings
   fmt:
     name: Rustfmt
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
-    - name: Install Rust
-      run: |
-        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-    - name: Cache dependencies
-      uses: Swatinem/rust-cache@v2.6.2
-    - name: Run cargo fmt
-      run: cargo fmt --all -- --check
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v2.6.2
+      - name: Run cargo fmt
+        run: cargo fmt --all -- --check
   python-linting:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: "3.12"
-        cache: "pip"
-    - name: Install Dependencies
-      run: |
-        python -m pip install -U pip
-        python -m pip install -r requirements-dev.txt
-        python -m pip install -e .
-        maturin build --out dist
-        python -m pip install --no-index --find-links=dist/ prelude-parser
-    - name: Ruff format check
-      run: ruff format mary_elizabeth_utils tests --check
-    - name: Lint with ruff
-      run: ruff check .
-    - name: mypy check
-      run: mypy .
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+      - name: Install Dependencies
+        run: |
+          python -m pip install -U pip
+          python -m pip install -r requirements-dev.txt
+          python -m pip install -e .
+          maturin build --out dist
+          python -m pip install --no-index --find-links=dist/
+          mary-elizabeth-utils
+      - name: Ruff format check
+        run: ruff format mary_elizabeth_utils tests --check
+      - name: Lint with ruff
+        run: ruff check .
+      - name: mypy check
+        run: mypy .
   testing:
     strategy:
       fail-fast: false
@@ -64,18 +65,19 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
-    - uses: actions/checkout@v4
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v5
-      with:
-        python-version: ${{ matrix.python-version }}
-        cache: "pip"
-    - name: Install Dependencies
-      run: |
-        python -m pip install -U pip
-        python -m pip install -r requirements-dev.txt
-        python -m pip install -e .
-        maturin build --out dist
-        python -m pip install --no-index --find-links=dist/ prelude-parser
-    - name: Test with pytest
-      run: pytest
+      - uses: actions/checkout@v4
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: "pip"
+      - name: Install Dependencies
+        run: |
+          python -m pip install -U pip
+          python -m pip install -r requirements-dev.txt
+          python -m pip install -e .
+          maturin build --out dist
+          python -m pip install --no-index --find-links=dist/
+          mary-elizabeth-utils
+      - name: Test with pytest
+        run: pytest
