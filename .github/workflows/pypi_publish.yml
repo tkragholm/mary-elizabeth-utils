@@ -3,8 +3,11 @@ on:
   release:
     types:
       - published
+
 permissions:
   contents: read
+  packages: write
+
 jobs:
   linux:
     runs-on: ubuntu-latest
@@ -20,14 +23,14 @@ jobs:
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
-          args: --release --out dist --find-interpreter
+          args: --release --out dist --find-interpreter -v
           sccache: "true"
           manylinux: auto
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
           name: wheels-linux-${{ matrix.target }}
-          path: dist
+          path: dist/*.whl
 
   windows:
     runs-on: windows-latest
@@ -44,13 +47,13 @@ jobs:
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
-          args: --release --out dist --find-interpreter
+          args: --release --out dist --find-interpreter -v
           sccache: "true"
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
           name: wheels-windows-${{ matrix.target }}
-          path: dist
+          path: dist/*.whl
 
   macos:
     runs-on: macos-latest
@@ -66,13 +69,13 @@ jobs:
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
-          args: --release --out dist --find-interpreter
+          args: --release --out dist --find-interpreter -v
           sccache: "true"
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
           name: wheels-macos-${{ matrix.target }}
-          path: dist
+          path: dist/*.whl
 
   sdist:
     runs-on: ubuntu-latest
@@ -87,21 +90,29 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: sdist
-          path: dist
+          path: dist/*.tar.gz
 
   release:
     name: Release
     runs-on: ubuntu-latest
-    if: "startsWith(github.ref, 'refs/tags/')"
+    if: success() && startsWith(github.ref, 'refs/tags/')
     needs: [linux, windows, macos, sdist]
     steps:
       - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
       - name: Create dist directory
         run: mkdir -p dist
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
-          path: dist
+          path: artifacts
+      - name: Move files to dist
+        run: |
+          find artifacts -name '*.whl' -exec mv {} dist/ \;
+          find artifacts -name '*.tar.gz' -exec mv {} dist/ \;
       - name: Display structure of downloaded files
         run: ls -R dist
       - name: Publish to PyPI
@@ -110,4 +121,15 @@ jobs:
           MATURIN_PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
         with:
           command: upload
-          args: --skip-existing dist/**/*
+          args: --skip-existing dist/*
+
+  cache:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Cache pip
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
