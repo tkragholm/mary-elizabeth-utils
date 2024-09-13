@@ -1,52 +1,45 @@
-import os
+from dataclasses import dataclass
+from pathlib import Path
 
-# Base directories
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR = os.path.join(BASE_DIR, "data")
-OUTPUT_DIR = os.path.join(BASE_DIR, "output")
 
-# Data preparation
-START_YEAR = 2000
-END_YEAR = 2022
+@dataclass
+class Config:
+    """
+    Configuration class for the Mary Elizabeth Utils package.
 
-# Register names
-REGISTERS = ["LPR", "MFR", "IND", "BEF", "UDDF"]
+    Attributes:
+        BASE_DIR (Path): Base directory for the project.
+        DATA_DIR (Path): Directory containing the data files.
+        OUTPUT_DIR (Path): Directory for output files.
+        START_YEAR (int): Start year for data processing.
+        END_YEAR (int): End year for data processing.
+        REGISTERS (list[str]): List of registers to process.
+        TABLE_NAMES (list[str]): List of table names to create.
+        SEVERE_CHRONIC_CODES (list[str]): List of severe chronic disease codes.
+        NUMERIC_COLS (list[str]): List of numeric columns.
+        CATEGORICAL_COLS (list[str]): List of categorical columns.
+    """
 
-# Table names
-TABLE_NAMES = [
-    "Person_Year_Income",
-    "Person",
-    "Family",
-    "Child",
-    "Diagnosis",
-    "Employment",
-    "Education",
-    "Healthcare",
-    "Time",
-    "Socioeconomic_Status",
-    "Treatment_Period",
-    "Person_Child",
-    "Person_Family",
-]
+    BASE_DIR: Path
+    DATA_DIR: Path
+    OUTPUT_DIR: Path
+    START_YEAR: int
+    END_YEAR: int
+    REGISTERS: list[str]
+    TABLE_NAMES: list[str]
+    SEVERE_CHRONIC_CODES: list[str]
+    NUMERIC_COLS: list[str]
+    CATEGORICAL_COLS: list[str]
 
-# Severe chronic disease codes
-SEVERE_CHRONIC_CODES = [
-    "Q20",
-    "Q21",
-    "Q22",
-    "Q23",
-    "Q24",
-    "Q25",
-    "Q26",
-    "Q27",
-    "Q28",
-    "E10",
-    "C00",
-    "C97",
-    "G40",
-    "G80",
-]
+    @classmethod
+    def from_dict(cls, config_dict: dict) -> "Config":
+        """
+        Create a Config instance from a dictionary.
 
-# Analysis variables
-NUMERIC_COLS = ["birth_date", "family_size", "total_income"]
-CATEGORICAL_COLS = ["gender", "origin_type", "family_type", "socioeconomic_status"]
+        Args:
+            config_dict (dict): Dictionary containing configuration parameters.
+
+        Returns:
+            Config: An instance of the Config class.
+        """
+        return cls(**config_dict)

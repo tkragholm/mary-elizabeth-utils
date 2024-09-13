@@ -2,39 +2,25 @@ import logging
 from pathlib import Path
 
 import polars as pl
-from polars.datatypes import (
-    DataTypeClass,
-    Date,
-    Float32,
-    Float64,
-    Int32,
-    Utf8,
-)
+from polars.datatypes import DataTypeClass, Date, Float32, Float64, Int32, Utf8
 
-from .config import DATA_DIR, END_YEAR, OUTPUT_DIR, REGISTERS, START_YEAR
-
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-
-
-def load_register_data(
-    register: str, years: list[int], data_dir: str = DATA_DIR
-) -> pl.LazyFrame | None:
-    try:
-        dfs = [
-            pl.scan_parquet(Path(data_dir) / f"{register}_{year}.parquet").with_columns(
-                pl.lit(year).alias("year")
-            )
-            for year in years
-        ]
-        return pl.concat(dfs)
-    except Exception as e:
-        logging.error(f"Error loading data for register {register}: {str(e)}")
-        return None
+logger = logging.getLogger(__name__)
 
 
 def check_required_columns(
     df: pl.LazyFrame | None, required_columns: list[str], data_name: str
 ) -> None:
+    """
+    Check if the DataFrame contains all required columns.
+
+    Args:
+        df (Optional[pl.LazyFrame]): The DataFrame to check.
+        required_columns (List[str]): List of required column names.
+        data_name (str): Name of the data source for logging purposes.
+
+    Raises:
+        ValueError: If df is None or if any required columns are missing.
+    """
     if df is None:
         raise ValueError(f"{data_name} data is None")
     missing_columns = [col for col in required_columns if col not in df.columns]
@@ -44,12 +30,60 @@ def check_required_columns(
         )
 
 
+def load_register_data(register: str, years: list[int], data_dir: Path) -> pl.LazyFrame:
+    """
+    Load register data for specified years.
+
+    Args:
+        register (str): Name of the register.
+        years (List[int]): List of years to load data for.
+        data_dir (Path): Directory containing the data files.
+
+    Returns:
+        pl.LazyFrame: Concatenated LazyFrame of all years' data.
+
+    Raises:
+        FileNotFoundError: If any of the required files are not found.
+        Exception: For any other errors during data loading.
+    """
+    try:
+        dfs = []
+        for year in years:
+            file_path = data_dir / f"{register}_{year}.parquet"
+            if not file_path.exists():
+                raise FileNotFoundError(f"Data file not found: {file_path}")
+            df = pl.scan_parquet(file_path).with_columns(pl.lit(year).alias("year"))
+            dfs.append(df)
+        return pl.concat(dfs)
+    except FileNotFoundError as e:
+        logger.error(f"File not found: {str(e)}")
+        raise
+    except Exception as e:
+        logger.error(f"Error loading data for register {register}: {str(e)}")
+        raise
+
+
 def create_table(
     df: pl.LazyFrame | None,
-    columns: list[tuple[str, str, DataTypeClass]],
+    columns: list[tuple[str, str, pl.DataTypeClass]],
     required_columns: list[str],
     data_name: str,
 ) -> pl.LazyFrame | None:
+    """
+    Create a table with specified columns from the input DataFrame.
+
+    Args:
+        df (Optional[pl.LazyFrame]): Input DataFrame.
+        columns (List[Tuple[str, str, pl.DataType]]): List of (original_name, new_name, data_type) tuples.
+        required_columns (List[str]): List of required column names.
+        data_name (str): Name of the data source for logging purposes.
+
+    Returns:
+        Optional[pl.LazyFrame]: Created table, or None if input is None.
+
+    Raises:
+        ValueError: If required columns are missing.
+    """
     if df is None:
         return None
     check_required_columns(df, required_columns, data_name)
@@ -154,6 +188,16 @@ def create_healthcare_table(lpr_data: pl.LazyFrame | None) -> pl.LazyFrame | Non
 
 
 def create_time_table(start_year: int, end_year: int) -> pl.LazyFrame:
+    """
+    Create a time dimension table.
+
+    Args:
+        start_year (int): Start year of the time range.
+        end_year (int): End year of the time range.
+
+    Returns:
+        pl.LazyFrame: Time dimension table.
+    """
     dates = pl.date_range(start=f"{start_year}-01-01", end=f"{end_year}-12-31", interval="1d")
     return pl.DataFrame(
         {
@@ -248,55 +292,3 @@ def create_person_year_income_table(ind_data: pl.LazyFrame | None) -> pl.LazyFra
     ]
     required_columns = [col[0] for col in columns]
     return create_table(ind_data, columns, required_columns, "IND")
-
-
-def collect_and_integrate_data() -> None:
-    try:
-        register_data = {
-            register: load_register_data(register, list(range(START_YEAR, END_YEAR + 1)))
-            for register in REGISTERS
-        }
-
-        tables: dict[str, pl.LazyFrame | None] = {
-            "Person": create_person_table(register_data.get("BEF")),
-            "Family": create_family_table(register_data.get("BEF")),
-            "Child": create_child_table(register_data.get("MFR")),
-            "Diagnosis": create_diagnosis_table(register_data.get("LPR")),
-            "Employment": create_employment_table(register_data.get("IND")),
-            "Education": create_education_table(register_data.get("UDDF")),
-            "Healthcare": create_healthcare_table(register_data.get("LPR")),
-            "Time": create_time_table(START_YEAR, END_YEAR),
-            "Socioeconomic_Status": create_socioeconomic_status_table(
-                register_data.get("IND"), register_data.get("UDDF")
-            ),
-            "Treatment_Period": create_treatment_period_table(
-                create_diagnosis_table(register_data.get("LPR")),
-                create_child_table(register_data.get("MFR")),
-            ),
-            "Person_Child": create_person_child_table(
-                register_data.get("BEF"), create_child_table(register_data.get("MFR"))
-            ),
-            "Person_Family": create_person_family_table(
-                register_data.get("BEF"), create_family_table(register_data.get("BEF"))
-            ),
-            "Person_Year_Income": create_person_year_income_table(register_data.get("IND")),
-        }
-
-        output_dir = Path(OUTPUT_DIR)
-        output_dir.mkdir(parents=True, exist_ok=True)
-
-        for name, df in tables.items():
-            if df is not None:
-                output_path = output_dir / f"{name}.parquet"
-                df.collect().write_parquet(output_path)
-                logging.info(f"Successfully saved {name} table to {output_path}")
-            else:
-                logging.warning(f"Table {name} could not be created due to missing data")
-
-    except Exception as e:
-        logging.error(f"An error occurred during data collection and integration: {str(e)}")
-        raise
-
-
-if __name__ == "__main__":
-    collect_and_integrate_data()

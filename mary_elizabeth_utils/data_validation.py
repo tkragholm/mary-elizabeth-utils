@@ -1,14 +1,7 @@
 import logging
-import os
 from collections.abc import Callable
-from typing import Any
 
-import numpy as np
 import polars as pl
-
-from .config import OUTPUT_DIR, TABLE_NAMES  # type: ignore
-
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 
 def check_missing_values(df: pl.LazyFrame, table_name: str) -> None:
@@ -101,89 +94,3 @@ def check_logical_consistency(
                 logging.info(f"  {rule_name}: {inconsistent_count} inconsistencies detected")
         except Exception as e:
             logging.error(f"Error checking consistency rule '{rule_name}': {str(e)}")
-
-
-def impute_missing_values(df: pl.LazyFrame, strategy: dict[str, str]) -> pl.LazyFrame:
-    for column, method in strategy.items():
-        try:
-            if method == "mean":
-                df = df.with_columns(pl.col(column).fill_null(pl.col(column).mean()))
-            elif method == "median":
-                df = df.with_columns(pl.col(column).fill_null(pl.col(column).median()))
-            elif method == "mode":
-                df = df.with_columns(pl.col(column).fill_null(pl.col(column).mode()))
-            elif method in ["forward", "backward"]:
-                df = df.with_columns(pl.col(column).fill_null(method))
-            else:
-                raise ValueError(f"Invalid imputation method '{method}' for column '{column}'")
-        except Exception as e:
-            logging.error(f"Error imputing missing values for column {column}: {str(e)}")
-    return df
-
-
-def apply_transformations(
-    df: pl.LazyFrame, transformations: dict[str, Callable[[Any], Any]]
-) -> pl.LazyFrame:
-    for column, transform_func in transformations.items():
-        try:
-            df = df.with_columns(
-                pl.col(column).map_elements(transform_func).alias(f"{column}_transformed")
-            )
-        except Exception as e:
-            logging.error(f"Error applying transformation to column {column}: {str(e)}")
-    return df
-
-
-def process_table(table_name: str) -> None:
-    logging.info(f"Processing table: {table_name}")
-
-    try:
-        df = pl.scan_parquet(os.path.join(OUTPUT_DIR, f"{table_name}.parquet"))
-
-        check_missing_values(df, table_name)
-
-        numeric_columns = [
-            col
-            for col in df.columns
-            if pl.dtype_to_pandas_dtype(df.schema[col]) in ["int64", "float64"]
-        ]
-        check_outliers(df, table_name, numeric_columns)
-
-        consistency_rules: dict[str, Callable[[pl.LazyFrame], pl.Expr]] = {
-            "Birth date after current date": lambda x: pl.col("birth_date") > pl.now(),
-            # Add more rules as needed
-        }
-        check_logical_consistency(df, table_name, consistency_rules)
-
-        imputation_strategy = {
-            "numeric_column": "mean",
-            "categorical_column": "mode",
-            "date_column": "forward",
-            # Add more columns and strategies as needed
-        }
-        df = impute_missing_values(df, imputation_strategy)
-
-        transformations: dict[str, Callable[[Any], Any]] = {
-            "income": np.log1p,
-            # Add more transformations as needed
-        }
-        df = apply_transformations(df, transformations)
-
-        output_path = os.path.join(OUTPUT_DIR, f"{table_name}_processed.parquet")
-        df.collect().write_parquet(output_path)
-        logging.info(f"Processed {table_name} saved to {output_path}")
-
-    except Exception as e:
-        logging.error(f"Error processing {table_name}: {str(e)}")
-
-
-def main() -> None:
-    """
-    Main function to process all tables defined in TABLE_NAMES.
-    """
-    for table_name in TABLE_NAMES:
-        process_table(table_name)
-
-
-if __name__ == "__main__":
-    main()

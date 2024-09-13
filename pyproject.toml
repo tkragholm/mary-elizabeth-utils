@@ -6,13 +6,26 @@ build-backend = "maturin"
 name = "mary-elizabeth-utils"
 description = "My utilities for the different projects"
 authors = [{ name = "Tobias Kragholm", email = "tkragholm@gmail.com" }]
-license = "MIT"
+license = { text = "MIT" }
 readme = "README.md"
-dependencies = ["polars", "matplotlib", "seaborn", "pandas", "numpy"]
+requires-python = ">=3.7"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dynamic = ["version"]
+
+[project.dependencies]
+polars = "*"
+matplotlib = "*"
+seaborn = "*"
+pandas = "*"
+numpy = "*"
 
 [tool.maturin]
 module-name = "mary_elizabeth_utils._mary_elizabeth_utils"
-binding = "pyo3"
+python-source = "python"
 features = ["pyo3/extension-module"]
 
 [tool.mypy]
@@ -38,7 +51,6 @@ fix = true
 [tool.ruff.lint]
 select = ["E", "B", "F", "UP", "I001", "T201", "T203"]
 ignore = [
-    # Recommended ignores by ruff when using formatter
     "E501",
     "W191",
     "E111",

@@ -1,17 +1,8 @@
-import logging
-import os
+from pathlib import Path
 
 import matplotlib.pyplot as plt
 import polars as pl
 import seaborn as sns  # type: ignore
-
-from .config import CATEGORICAL_COLS, NUMERIC_COLS, OUTPUT_DIR
-
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-
-
-def load_data(table_name: str) -> pl.LazyFrame:
-    return pl.scan_parquet(os.path.join(OUTPUT_DIR, f"{table_name}_processed.parquet"))
 
 
 def generate_summary_statistics(
@@ -20,6 +11,18 @@ def generate_summary_statistics(
     numeric_cols: list[str],
     categorical_cols: list[str],
 ) -> pl.DataFrame:
+    """
+    Generate summary statistics for the given DataFrame.
+
+    Args:
+        df (pl.LazyFrame): The input DataFrame.
+        group_col (str): The column to group by.
+        numeric_cols (List[str]): List of numeric column names.
+        categorical_cols (List[str]): List of categorical column names.
+
+    Returns:
+        pl.DataFrame: A DataFrame containing summary statistics.
+    """
     numeric_summary = df.group_by(group_col).agg(
         [
             *[pl.col(col).mean().alias(f"{col}_mean") for col in numeric_cols],
@@ -37,7 +40,18 @@ def generate_summary_statistics(
     return numeric_summary.join(categorical_summary, on=group_col).collect()
 
 
-def plot_numeric_comparisons(df: pl.DataFrame, group_col: str, numeric_cols: list[str]) -> None:
+def plot_numeric_comparisons(
+    df: pl.DataFrame, group_col: str, numeric_cols: list[str], output_dir: Path
+) -> None:
+    """
+    Create box plots for numeric comparisons.
+
+    Args:
+        df (pl.DataFrame): The input DataFrame.
+        group_col (str): The column to group by.
+        numeric_cols (List[str]): List of numeric column names to plot.
+        output_dir (Path): Directory to save the output plot.
+    """
     n_cols = 3
     n_rows = (len(numeric_cols) - 1) // n_cols + 1
     fig, axes = plt.subplots(n_rows, n_cols, figsize=(15, 5 * n_rows))
@@ -52,13 +66,22 @@ def plot_numeric_comparisons(df: pl.DataFrame, group_col: str, numeric_cols: lis
         axes[i].remove()
 
     plt.tight_layout()
-    plt.savefig(os.path.join(OUTPUT_DIR, "numeric_comparisons.png"))
+    plt.savefig(output_dir / "numeric_comparisons.png")
     plt.close()
 
 
 def plot_categorical_comparisons(
-    df: pl.DataFrame, group_col: str, categorical_cols: list[str]
+    df: pl.DataFrame, group_col: str, categorical_cols: list[str], output_dir: Path
 ) -> None:
+    """
+    Create stacked bar plots for categorical comparisons.
+
+    Args:
+        df (pl.DataFrame): The input DataFrame.
+        group_col (str): The column to group by.
+        categorical_cols (List[str]): List of categorical column names to plot.
+        output_dir (Path): Directory to save the output plot.
+    """
     n_cols = 2
     n_rows = (len(categorical_cols) - 1) // n_cols + 1
     fig, axes = plt.subplots(n_rows, n_cols, figsize=(15, 5 * n_rows))
@@ -77,38 +100,5 @@ def plot_categorical_comparisons(
         axes[i].remove()
 
     plt.tight_layout()
-    plt.savefig(os.path.join(OUTPUT_DIR, "categorical_comparisons.png"))
+    plt.savefig(output_dir / "categorical_comparisons.png")
     plt.close()
-
-
-def main() -> None:
-    try:
-        cohort_df = load_data("cohort_treatment_periods")
-        person_df = load_data("Person")
-        family_df = load_data("Family")
-        socioeconomic_df = load_data("Socioeconomic_Status")
-
-        baseline_data = (
-            cohort_df.join(person_df, left_on="child_id", right_on="person_id")
-            .join(family_df, on="family_id")
-            .join(socioeconomic_df, on="family_id")
-        )
-
-        summary_stats = generate_summary_statistics(
-            baseline_data, "group", NUMERIC_COLS, CATEGORICAL_COLS
-        )
-        summary_stats.write_csv(os.path.join(OUTPUT_DIR, "summary_statistics.csv"))
-        logging.info("Summary statistics saved to CSV.")
-
-        plot_numeric_comparisons(baseline_data.collect(), "group", NUMERIC_COLS)
-        logging.info("Numeric comparisons plot saved.")
-
-        plot_categorical_comparisons(baseline_data.collect(), "group", CATEGORICAL_COLS)
-        logging.info("Categorical comparisons plot saved.")
-
-    except Exception as e:
-        logging.error(f"An error occurred during baseline characteristics analysis: {str(e)}")
-
-
-if __name__ == "__main__":
-    main()
