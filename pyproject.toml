@@ -16,12 +16,8 @@ classifiers = [
 ]
 dynamic = ["version"]
 
-[project.dependencies]
-polars = "*"
-matplotlib = "*"
-seaborn = "*"
-pandas = "*"
-numpy = "*"
+dependencies = ["polars", "matplotlib", "seaborn", "pandas", "numpy"]
+
 
 [tool.maturin]
 module-name = "mary_elizabeth_utils._mary_elizabeth_utils"
