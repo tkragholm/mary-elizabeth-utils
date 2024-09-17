@@ -1,3 +1,4 @@
+from ._mary_elizabeth_utils import get_readstat_path  # type: ignore
 from .config import Config
 from .data_analysis import (
     generate_summary_statistics,
@@ -23,4 +24,5 @@ __all__ = [
     "check_missing_values",
     "check_outliers",
     "run_analysis",
+    "get_readstat_path",
 ]

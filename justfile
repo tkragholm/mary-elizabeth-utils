@@ -34,7 +34,7 @@
   ruff check . --fix
 
 @ruff-format:
-  ruff format mary_elizabeth_utils tests
+  ruff format python/mary_elizabeth_utils tests
 
 @test:
   pytest
