@@ -53,7 +53,7 @@ jobs:
           maturin build --out dist
           python -m pip install --no-index --find-links=dist/ mary-elizabeth-utils
       - name: Ruff format check
-        run: ruff format mary_elizabeth_utils tests --check
+        run: ruff format python/mary_elizabeth_utils tests --check
       - name: Lint with ruff
         run: ruff check .
       - name: mypy check

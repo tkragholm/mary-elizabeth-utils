@@ -18,11 +18,11 @@ from readstat_wrapper import ReadstatWrapper
 readstat = ReadstatWrapper(get_readstat_path())
 
 # Get metadata
-metadata = readstat.get_metadata("/path/to/example.sas7bdat")
+metadata = readstat.metadata("/path/to/example.sas7bdat")
 print(metadata)
 
 # Preview data
-preview = readstat.get_preview("/path/to/example.sas7bdat", rows=20)
+preview = readstat.preview("/path/to/example.sas7bdat", rows=20)
 print(preview)
 
 # Convert to CSV
