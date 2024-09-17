@@ -72,9 +72,17 @@ fn download_and_extract_readstat() -> Result<()> {
         Path::new(&out_dir).join(binary_name),
     )?;
 
+    // Copy the binary to a known location within the package structure
+    let package_binary_path = Path::new("rust-bin")
+        .join("readstat_binary")
+        .join(binary_name);
+    fs::create_dir_all(package_binary_path.parent().unwrap())?;
+    fs::copy(Path::new(&out_dir).join(binary_name), &package_binary_path)?;
+
+    // Set the READSTAT_BINARY environment variable
     println!(
         "cargo:rustc-env=READSTAT_BINARY={}",
-        Path::new(&out_dir).join(binary_name).display()
+        package_binary_path.display()
     );
 
     Ok(())

@@ -26,4 +26,4 @@ dirs = "5.0"
 
 [package.metadata.maturin]
 python-source = "python"
-include = ["rust-bin/readstat_binary/readstat"]
+include = ["rust-bin/readstat_binary/*"]

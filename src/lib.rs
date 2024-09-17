@@ -3,15 +3,14 @@ use std::path::PathBuf;
 
 #[pyfunction]
 fn get_readstat_path() -> PyResult<PathBuf> {
-    let path = std::env::var("READSTAT_BINARY")
-        .map(PathBuf::from)
-        .map_err(|e| {
-            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!(
-                "Failed to get READSTAT_BINARY: {}",
-                e
-            ))
-        })?;
-    Ok(path)
+    let path = PathBuf::from(env!("READSTAT_BINARY"));
+    if path.exists() {
+        Ok(path)
+    } else {
+        Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+            "ReadStat binary not found at the expected location",
+        ))
+    }
 }
 
 /// A Python module implemented in Rust.

@@ -139,3 +139,8 @@ dmypy.json
 
 # Rust
 /target
+
+# Custom
+auto_commit.py
+calculate_api_cost.py
+/rust-bin

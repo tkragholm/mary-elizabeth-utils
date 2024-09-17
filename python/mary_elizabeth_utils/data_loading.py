@@ -1,8 +1,9 @@
 import logging
 from pathlib import Path
+from typing import Any
 
 import polars as pl
-from polars.datatypes import DataTypeClass, Date, Float32, Float64, Int32, Utf8
+from polars import Date, Float32, Float64, Int32, Utf8
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +66,7 @@ def load_register_data(register: str, years: list[int], data_dir: Path) -> pl.La
 
 def create_table(
     df: pl.LazyFrame | None,
-    columns: list[tuple[str, str, pl.DataTypeClass]],
+    columns: list[tuple[str, str, Any]],
     required_columns: list[str],
     data_name: str,
 ) -> pl.LazyFrame | None:
@@ -91,7 +92,7 @@ def create_table(
 
 
 def create_person_table(bef_data: pl.LazyFrame | None) -> pl.LazyFrame | None:
-    columns: list[tuple[str, str, DataTypeClass]] = [
+    columns: list[tuple[str, str, Any]] = [
         ("PNR", "person_id", Utf8),
         ("FOED_DAG", "birth_date", Date),
         ("KOEN", "gender", Utf8),
@@ -108,7 +109,7 @@ def create_person_table(bef_data: pl.LazyFrame | None) -> pl.LazyFrame | None:
 
 
 def create_family_table(bef_data: pl.LazyFrame | None) -> pl.LazyFrame | None:
-    columns: list[tuple[str, str, DataTypeClass]] = [
+    columns: list[tuple[str, str, Any]] = [
         ("FAMILIE_ID", "family_id", Utf8),
         ("FAMILIE_TYPE", "family_type", Utf8),
         ("ANTPERSF", "family_size", Int32),
@@ -120,7 +121,7 @@ def create_family_table(bef_data: pl.LazyFrame | None) -> pl.LazyFrame | None:
 
 
 def create_child_table(mfr_data: pl.LazyFrame | None) -> pl.LazyFrame | None:
-    columns: list[tuple[str, str, DataTypeClass]] = [
+    columns: list[tuple[str, str, Any]] = [
         ("PNR", "child_id", Utf8),
         ("FAMILIE_ID", "family_id", Utf8),
         ("FOEDSELSDATO", "birth_date", Date),
@@ -134,7 +135,7 @@ def create_child_table(mfr_data: pl.LazyFrame | None) -> pl.LazyFrame | None:
 
 
 def create_diagnosis_table(lpr_data: pl.LazyFrame | None) -> pl.LazyFrame | None:
-    columns: list[tuple[str, str, DataTypeClass]] = [
+    columns: list[tuple[str, str, Any]] = [
         ("RECNUM", "diagnosis_id", Utf8),
         ("PNR", "person_id", Utf8),
         ("C_DIAG", "diagnosis_code", Utf8),
@@ -148,7 +149,7 @@ def create_diagnosis_table(lpr_data: pl.LazyFrame | None) -> pl.LazyFrame | None
 
 
 def create_employment_table(ind_data: pl.LazyFrame | None) -> pl.LazyFrame | None:
-    columns: list[tuple[str, str, DataTypeClass]] = [
+    columns: list[tuple[str, str, Any]] = [
         ("PNR", "person_id", Utf8),
         ("ARBGNR", "employer_id", Utf8),
         ("ARBNR", "workplace_id", Utf8),
@@ -161,7 +162,7 @@ def create_employment_table(ind_data: pl.LazyFrame | None) -> pl.LazyFrame | Non
 
 
 def create_education_table(uddf_data: pl.LazyFrame | None) -> pl.LazyFrame | None:
-    columns: list[tuple[str, str, DataTypeClass]] = [
+    columns: list[tuple[str, str, Any]] = [
         ("PNR", "person_id", Utf8),
         ("HFAUDD", "education_code", Utf8),
         ("HF_VFRA", "education_start_date", Date),
@@ -173,7 +174,7 @@ def create_education_table(uddf_data: pl.LazyFrame | None) -> pl.LazyFrame | Non
 
 
 def create_healthcare_table(lpr_data: pl.LazyFrame | None) -> pl.LazyFrame | None:
-    columns: list[tuple[str, str, DataTypeClass]] = [
+    columns: list[tuple[str, str, Any]] = [
         ("RECNUM", "event_id", Utf8),
         ("PNR", "person_id", Utf8),
         ("D_INDDTO", "admission_date", Date),
@@ -215,7 +216,7 @@ def create_socioeconomic_status_table(
 ) -> pl.LazyFrame | None:
     if ind_data is None:
         return None
-    columns: list[tuple[str, str, DataTypeClass]] = [
+    columns: list[tuple[str, str, Any]] = [
         ("FAMILIE_ID", "family_id", Utf8),
         ("year", "year", Int32),
         ("SOCIO13", "socioeconomic_status", Utf8),
@@ -283,7 +284,7 @@ def create_person_family_table(
 
 
 def create_person_year_income_table(ind_data: pl.LazyFrame | None) -> pl.LazyFrame | None:
-    columns: list[tuple[str, str, DataTypeClass]] = [
+    columns: list[tuple[str, str, Any]] = [
         ("PNR", "person_id", Utf8),
         ("year", "year", Int32),
         ("PERINDKIALT_13", "total_income", Float64),
