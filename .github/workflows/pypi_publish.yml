@@ -13,12 +13,16 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        target: [x86_64, x86, aarch64, armv7, s390x, ppc64le]
+        target: [x86_64, aarch64, armv7, s390x, ppc64le]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Install OpenSSL and other dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libssl-dev pkg-config
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
@@ -36,7 +40,7 @@ jobs:
     runs-on: windows-latest
     strategy:
       matrix:
-        target: [x64, x86]
+        target: [x64]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
