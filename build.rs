@@ -67,17 +67,18 @@ fn download_and_extract_readstat() -> Result<()> {
     } else {
         "readstat"
     };
-    fs::copy(
-        dest_path.join(binary_name),
-        Path::new(&out_dir).join(binary_name),
-    )?;
 
-    // Copy the binary to a known location within the package structure
-    let package_binary_path = Path::new("rust-bin")
-        .join("readstat_binary")
+    // Define the path for the Python package bin directory
+    let package_binary_path = Path::new("python")
+        .join("mary_elizabeth_utils")
+        .join("bin")
         .join(binary_name);
+
+    // Create the directory if it doesn't exist
     fs::create_dir_all(package_binary_path.parent().unwrap())?;
-    fs::copy(Path::new(&out_dir).join(binary_name), &package_binary_path)?;
+
+    // Copy the binary to the Python package bin directory
+    fs::copy(dest_path.join(binary_name), &package_binary_path)?;
 
     // Set the READSTAT_BINARY environment variable
     println!(

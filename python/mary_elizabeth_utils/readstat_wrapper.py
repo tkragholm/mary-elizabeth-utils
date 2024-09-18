@@ -1,12 +1,13 @@
 import json
 import subprocess
-from pathlib import Path
 from typing import Any
+
+from ._mary_elizabeth_utils import get_readstat_path  # type: ignore
 
 
 class ReadstatWrapper:
-    def __init__(self, readstat_path: str):
-        self.readstat_path = Path(readstat_path)
+    def __init__(self) -> None:
+        self.readstat_path = get_readstat_path()
         if not self.readstat_path.exists():
             raise FileNotFoundError(f"readstat binary not found at {self.readstat_path}")
 

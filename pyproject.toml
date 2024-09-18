@@ -23,6 +23,7 @@ dependencies = ["polars", "matplotlib", "seaborn", "pandas", "numpy"]
 module-name = "mary_elizabeth_utils._mary_elizabeth_utils"
 python-source = "python"
 features = ["pyo3/extension-module"]
+include = ["python/mary_elizabeth_utils/bin/*"]
 
 [tool.mypy]
 check_untyped_defs = true
