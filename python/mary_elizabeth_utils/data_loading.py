@@ -1,4 +1,5 @@
 import logging
+from pathlib import Path
 from typing import Any
 
 import polars as pl
@@ -36,7 +37,7 @@ def load_register_data(
     register: str, years: list[int], register_config: RegisterConfig
 ) -> pl.LazyFrame:
     """
-    Load register data for specified years.
+    Load register data for specified years, supporting both .parquet and .csv files.
 
     Args:
         register (str): Name of the register.
@@ -52,19 +53,39 @@ def load_register_data(
     """
     try:
         dfs = []
+        location = Path(register_config.location)
+
         for year in years:
             file_name = register_config.file_pattern.format(year=year)
-            file_path = register_config.location / file_name
+            file_path = location / file_name
+
+            logger.debug(f"Attempting to load file for {register}, year {year}: {file_path}")
 
             if not file_path.exists():
-                raise FileNotFoundError(f"Data file not found: {file_path}")
+                raise FileNotFoundError(
+                    f"Data file not found for {register}, year {year}: {file_path}"
+                )
 
-            df = pl.scan_parquet(file_path).with_columns(pl.lit(year).alias("year"))
+            logger.info(f"Loading file: {file_path}")
+
+            if file_path.suffix.lower() == ".parquet":
+                df = pl.scan_parquet(file_path)
+            elif file_path.suffix.lower() == ".csv":
+                df = pl.scan_csv(file_path)
+            else:
+                raise ValueError(
+                    f"Unsupported file format for {register}, year {year}: {file_path}"
+                )
+
+            df = df.with_columns(pl.lit(year).alias("year"))
             dfs.append(df)
 
         return pl.concat(dfs)
     except FileNotFoundError as e:
         logger.error(f"File not found: {str(e)}")
+        raise
+    except ValueError as e:
+        logger.error(f"Unsupported file format: {str(e)}")
         raise
     except Exception as e:
         logger.error(f"Error loading data for register {register}: {str(e)}")

@@ -60,15 +60,39 @@ class DataProcessor:
 
     def _load_register_data(self, register: str, years: range, config: dict) -> pl.LazyFrame:
         dfs = []
+        location = Path(config["location"])
         for year in years:
-            file_path = Path(config["location"]) / config["file_pattern"].format(year=year)
-            if file_path.exists():
-                df = pl.scan_parquet(file_path).with_columns(pl.lit(year).alias("year"))
-                dfs.append(df)
-            else:
+            file_name = config["file_pattern"].format(year=year)
+            file_path = location / file_name
+
+            if not file_path.exists():
                 self.logger.warning(
                     f"File not found for register {register}, year {year}: {file_path}"
                 )
+                continue
+
+            try:
+                if file_path.suffix.lower() == ".parquet":
+                    df = pl.scan_parquet(file_path)
+                elif file_path.suffix.lower() == ".csv":
+                    df = pl.scan_csv(file_path)
+                else:
+                    self.logger.warning(
+                        f"Unsupported file format for {register}, year {year}: {file_path}"
+                    )
+                    continue
+
+                df = df.with_columns(pl.lit(year).alias("year"))
+                dfs.append(df)
+            except Exception as e:
+                self.logger.error(
+                    f"Error loading file for {register}, year {year}: {file_path}. Error: {str(e)}"
+                )
+
+        if not dfs:
+            self.logger.warning(f"No data loaded for register {register}")
+            return pl.LazyFrame()  # Return an empty LazyFrame if no data was loaded
+
         return pl.concat(dfs)
 
     def process_health_data(self) -> None:
