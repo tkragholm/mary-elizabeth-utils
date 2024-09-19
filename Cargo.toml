@@ -16,18 +16,18 @@ pyo3 = { version = "0.22.2", features = [
     "extension-module",
     "generate-import-lib",
 ] }
-dirs = "5.0"
+# dirs = "5.0"
 
 
 [build-dependencies]
-reqwest = { version = "0.11", features = ["blocking", "json"] }
-flate2 = "1.0"
-tar = "0.4"
-zip = "0.6"
-anyhow = "1.0"
-dirs = "5.0"
-bump2version = "*"
+# reqwest = { version = "0.11", features = ["blocking", "json"] }
+# flate2 = "1.0"
+# tar = "0.4"
+# zip = "0.6"
+# anyhow = "1.0"
+# dirs = "5.0"
+# bump2version = "*"
 
 [package.metadata.maturin]
-python-source = "python"
-include = ["python/bin/*"]
+# python-source = "python"
+# include = ["python/bin/*"]
