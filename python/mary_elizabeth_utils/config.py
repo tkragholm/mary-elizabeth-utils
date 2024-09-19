@@ -3,6 +3,12 @@ from pathlib import Path
 
 
 @dataclass
+class RegisterConfig:
+    file_pattern: str
+    location: Path
+
+
+@dataclass
 class Config:
     """
     Configuration class for the Mary Elizabeth Utils package.
@@ -25,7 +31,7 @@ class Config:
     OUTPUT_DIR: Path
     START_YEAR: int
     END_YEAR: int
-    REGISTERS: list[str]
+    REGISTERS: dict[str, RegisterConfig]
     TABLE_NAMES: list[str]
     SEVERE_CHRONIC_CODES: list[str]
     NUMERIC_COLS: list[str]
@@ -33,13 +39,9 @@ class Config:
 
     @classmethod
     def from_dict(cls, config_dict: dict) -> "Config":
-        """
-        Create a Config instance from a dictionary.
-
-        Args:
-            config_dict (dict): Dictionary containing configuration parameters.
-
-        Returns:
-            Config: An instance of the Config class.
-        """
+        registers = {
+            name: RegisterConfig(**reg_config)
+            for name, reg_config in config_dict["REGISTERS"].items()
+        }
+        config_dict["REGISTERS"] = registers
         return cls(**config_dict)

@@ -5,7 +5,7 @@ description = "My utilities for the different projects"
 edition = "2021"
 license = "MIT"
 readme = "README.md"
-build = "build.rs"
+#build = "build.rs"
 
 [lib]
 name = "_mary_elizabeth_utils"
@@ -30,4 +30,4 @@ bump2version = "*"
 
 [package.metadata.maturin]
 python-source = "python"
-include = ["rust-bin/readstat_binary/*"]
+include = ["python/bin/*"]

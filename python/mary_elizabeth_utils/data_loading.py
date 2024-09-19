@@ -1,9 +1,10 @@
 import logging
-from pathlib import Path
 from typing import Any
 
 import polars as pl
 from polars import Date, Float32, Float64, Int32, Utf8
+
+from .config import RegisterConfig
 
 logger = logging.getLogger(__name__)
 
@@ -31,14 +32,16 @@ def check_required_columns(
         )
 
 
-def load_register_data(register: str, years: list[int], data_dir: Path) -> pl.LazyFrame:
+def load_register_data(
+    register: str, years: list[int], register_config: RegisterConfig
+) -> pl.LazyFrame:
     """
     Load register data for specified years.
 
     Args:
         register (str): Name of the register.
         years (List[int]): List of years to load data for.
-        data_dir (Path): Directory containing the data files.
+        register_config (RegisterConfig): Configuration for the specific register.
 
     Returns:
         pl.LazyFrame: Concatenated LazyFrame of all years' data.
@@ -50,11 +53,15 @@ def load_register_data(register: str, years: list[int], data_dir: Path) -> pl.La
     try:
         dfs = []
         for year in years:
-            file_path = data_dir / f"{register}_{year}.parquet"
+            file_name = register_config.file_pattern.format(year=year)
+            file_path = register_config.location / file_name
+
             if not file_path.exists():
                 raise FileNotFoundError(f"Data file not found: {file_path}")
+
             df = pl.scan_parquet(file_path).with_columns(pl.lit(year).alias("year"))
             dfs.append(df)
+
         return pl.concat(dfs)
     except FileNotFoundError as e:
         logger.error(f"File not found: {str(e)}")

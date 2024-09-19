@@ -16,7 +16,14 @@ classifiers = [
 ]
 dynamic = ["version"]
 
-dependencies = ["polars", "matplotlib", "seaborn", "pandas", "numpy"]
+dependencies = [
+    "polars",
+    "matplotlib",
+    "seaborn",
+    "pandas",
+    "numpy",
+    "colorama",
+]
 
 
 [tool.maturin]
