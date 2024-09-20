@@ -1,8 +1,9 @@
-# Base directory for the project
-base_dir: "/path/to/base/directory"
-
-# Directory for output files
-output_dir: "/path/to/output/directory"
+# Define variables
+variables:
+  base_dir: "/path/to/base/directory" # Base directory for the project
+  output_dir: "${base_dir}/output" # Directory for output files
+  csv_dir: "/e/data"
+  parquet_dir: "/e/"
 
 # Year range for data processing
 start_year: 2000
@@ -10,60 +11,27 @@ end_year: 2022
 
 # Register configurations
 registers:
-  # LMDB:
-  #   file_pattern: "lmdb_{year}.parquet"
-  #   location: "/path/to/lmdb/data"
-  # LPR_ADM:
-  #   file_pattern: "lpr_adm_{year}.parquet"
-  #   location: "/path/to/lpr_adm/data"
   LPR_DIAG:
     file_pattern: "lpr_diag_{year}.parquet"
-    location: "/path/to/lpr_diag/data"
-  # LPR_SKSOPR:
-  #   file_pattern: "lpr_sksopr_{year}.parquet"
-  #   location: "/path/to/lpr_sksopr/data"
+    location: "${csv_dir}/lpr_diag"
   MFR:
     file_pattern: "mfr_{year}.parquet"
-    location: "/path/to/mfr/data"
-  # PSYK_ADM:
-  #   file_pattern: "psyk_adm_{year}.parquet"
-  #   location: "/path/to/psyk_adm/data"
-  # PSYK_DIAG:
-  #   file_pattern: "psyk_diag_{year}.parquet"
-  #   location: "/path/to/psyk_diag/data"
-  # SSSY:
-  #   file_pattern: "sssy_{year}.parquet"
-  #   location: "/path/to/sssy/data"
+    location: "${csv_dir}/mfr"
   AKM:
     file_pattern: "akm_{year}.parquet"
-    location: "/path/to/akm/data"
+    location: "${parquet_dir}/akm"
   FAIK:
     file_pattern: "faik_{year}.parquet"
-    location: "/path/to/faik/data"
-  # IDAN:
-  #   file_pattern: "idan_{year}.parquet"
-  #   location: "/path/to/idan/data"
-  # ILME:
-  #   file_pattern: "ilme_{year}.parquet"
-  #   location: "/path/to/ilme/data"
+    location: "${csv_dir}/faik"
   IND:
     file_pattern: "ind_{year}.parquet"
-    location: "/path/to/ind/data"
+    location: "${csv_dir}/ind"
   BEF:
     file_pattern: "bef_{year}.parquet"
-    location: "/path/to/bef/data"
-  # DOD:
-  #   file_pattern: "dod_{year}.parquet"
-  #   location: "/path/to/dod/data"
-  # DODSAARS:
-  #   file_pattern: "dodsaars_{year}.parquet"
-  #   location: "/path/to/dodsaars/data"
-  # FTBARN:
-  #   file_pattern: "ftbarn_{year}.parquet"
-  #   location: "/path/to/ftbarn/data"
+    location: "${parquet_dir}/bef"
   UDDF:
     file_pattern: "uddf_{year}.parquet"
-    location: "/path/to/uddf/data"
+    location: "${csv_dir}/uddf"
 
 # Table names
 table_names:
@@ -82,7 +50,7 @@ table_names:
   - Psychiatric
 
 # Path to the CSV file containing ICD-10 codes
-icd10_codes_file: "data/icd10.csv"
+icd10_codes_file: "${base_dir}/data/icd10.csv"
 
 # Numeric columns for analysis and validation
 numeric_cols:

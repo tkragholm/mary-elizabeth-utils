@@ -1,3 +1,4 @@
+import csv
 import logging
 from pathlib import Path
 from typing import Any
@@ -5,9 +6,75 @@ from typing import Any
 import polars as pl
 from polars import Date, Float32, Float64, Int32, Utf8
 
-from .config import RegisterConfig
+from ..config.config import Config, RegisterConfig
 
 logger = logging.getLogger(__name__)
+
+
+def load_all_register_data(config: Config) -> dict[str, pl.LazyFrame]:
+    register_data = {}
+    for register, register_config in config.REGISTERS.items():
+        years = list(range(config.START_YEAR, config.END_YEAR + 1))
+        register_data[register] = load_register_data(
+            register, years, register_config, config.BASE_DIR
+        )
+    return register_data
+
+
+def process_all_data(register_data: dict[str, pl.LazyFrame]) -> dict[str, pl.LazyFrame]:
+    tables = {}
+
+    # Process health data
+    lpr_diag = register_data.get("LPR_DIAG")
+    if lpr_diag is not None:
+        tables["Diagnosis"] = create_diagnosis_table(lpr_diag)
+
+    mfr = register_data.get("MFR")
+    if mfr is not None:
+        tables["Birth"] = create_child_table(mfr)
+
+    lmdb = register_data.get("LMDB")
+    if lmdb is not None:
+        tables["Medication"] = create_medication_table(lmdb)
+
+    # Process economic data
+    ind = register_data.get("IND")
+    if ind is not None:
+        tables["Income"] = create_person_year_income_table(ind)
+
+    akm = register_data.get("AKM")
+    if akm is not None:
+        tables["Employment"] = create_employment_table(akm)
+
+    # Process demographic data
+    bef = register_data.get("BEF")
+    if bef is not None:
+        tables["Person"] = create_person_table(bef)
+
+    uddf = register_data.get("UDDF")
+    if uddf is not None:
+        tables["Education"] = create_education_table(uddf)
+
+    return tables  # type: ignore
+
+
+def load_icd10_codes(config: Config) -> dict[str, str]:
+    icd10_codes = {}
+    file_path = config.ICD10_CODES_FILE
+    logger.debug(f"Loading ICD10 codes from: {file_path}")
+    with open(file_path, newline="") as csvfile:
+        reader = csv.DictReader(csvfile)
+        for row in reader:
+            codes = row["ICD10-codes"].split(";")
+            for code in codes:
+                code = code.strip()
+                if "-" in code:
+                    start, end = code.split("-")
+                    icd10_codes[start] = row["Diagnoses"]
+                    icd10_codes[end] = row["Diagnoses"]
+                else:
+                    icd10_codes[code] = row["Diagnoses"]
+    return icd10_codes
 
 
 def check_required_columns(
@@ -34,31 +101,12 @@ def check_required_columns(
 
 
 def load_register_data(
-    register: str, years: list[int], register_config: RegisterConfig
+    register: str, years: list[int], register_config: RegisterConfig, base_dir: Path
 ) -> pl.LazyFrame:
-    """
-    Load register data for specified years, supporting both .parquet and .csv files.
-
-    Args:
-        register (str): Name of the register.
-        years (List[int]): List of years to load data for.
-        register_config (RegisterConfig): Configuration for the specific register.
-
-    Returns:
-        pl.LazyFrame: Concatenated LazyFrame of all years' data.
-
-    Raises:
-        FileNotFoundError: If any of the required files are not found.
-        Exception: For any other errors during data loading.
-    """
     try:
         dfs = []
-        location = Path(register_config.location)
-
         for year in years:
-            file_name = register_config.file_pattern.format(year=year)
-            file_path = location / file_name
-
+            file_path = register_config.get_file_path(year, base_dir)
             logger.debug(f"Attempting to load file for {register}, year {year}: {file_path}")
 
             if not file_path.exists():
@@ -199,6 +247,19 @@ def create_education_table(uddf_data: pl.LazyFrame | None) -> pl.LazyFrame | Non
     ]
     required_columns = [col[0] for col in columns]
     return create_table(uddf_data, columns, required_columns, "UDDF")
+
+
+def create_medication_table(lmdb_data: pl.LazyFrame | None) -> pl.LazyFrame | None:
+    columns: list[tuple[str, str, Any]] = [
+        ("PNR12", "person_id", Utf8),
+        ("ATC", "atc_code", Utf8),
+        ("EKSD", "prescription_date", Date),
+        ("VOLUMEN", "volume", Float32),
+        ("STYRKE", "strength", Float32),
+        ("PAKSTR", "package_size", Int32),
+    ]
+    required_columns = [col[0] for col in columns]
+    return create_table(lmdb_data, columns, required_columns, "LMDB")
 
 
 def create_healthcare_table(lpr_data: pl.LazyFrame | None) -> pl.LazyFrame | None:
