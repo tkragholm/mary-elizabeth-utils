@@ -26,12 +26,15 @@ dependencies = [
     "pyyaml",
 ]
 
+[project.scripts]
+get_42 = "pyo3_mixed:get_42"
+print_cli_args = "pyo3_mixed:print_cli_args"
 
 [tool.maturin]
-module-name = "mary_elizabeth_utils._mary_elizabeth_utils"
+module-name = "mary_elizabeth_utils.mary_elizabeth_utils"
 python-source = "python"
-features = ["pyo3/extension-module"]
-include = ["python/mary_elizabeth_utils/bin/*"]
+#features = ["pyo3/extension-module"]
+#include = ["python/mary_elizabeth_utils/bin/*"]
 
 [tool.mypy]
 check_untyped_defs = true

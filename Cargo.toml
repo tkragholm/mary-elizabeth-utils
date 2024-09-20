@@ -8,7 +8,7 @@ readme = "README.md"
 #build = "build.rs"
 
 [lib]
-name = "_mary_elizabeth_utils"
+name = "mary_elizabeth_utils"
 crate-type = ["cdylib"]
 
 [dependencies]
@@ -17,17 +17,3 @@ pyo3 = { version = "0.22.2", features = [
     "generate-import-lib",
 ] }
 # dirs = "5.0"
-
-
-[build-dependencies]
-# reqwest = { version = "0.11", features = ["blocking", "json"] }
-# flate2 = "1.0"
-# tar = "0.4"
-# zip = "0.6"
-# anyhow = "1.0"
-# dirs = "5.0"
-# bump2version = "*"
-
-[package.metadata.maturin]
-# python-source = "python"
-# include = ["python/bin/*"]
