@@ -1,5 +1,12 @@
 # mary-elizabeth-utils
 
+## TODO
+
+- update script to handle uddf properly (single year)
+- handle year and month in file names
+- handle LPR2 and LPR3
+- LPR_ADM + LPR_DIAG
+
 My utilities for the different projects
 
 ## Installation
