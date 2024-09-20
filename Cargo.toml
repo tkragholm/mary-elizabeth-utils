@@ -1,6 +1,6 @@
 [package]
 name = "mary-elizabeth-utils"
-version = "0.1.16"
+version = "0.1.17"
 description = "My utilities for the different projects"
 edition = "2021"
 license = "MIT"
