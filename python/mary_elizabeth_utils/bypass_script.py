@@ -20,24 +20,33 @@ from mary_elizabeth_utils.utils.reports import (
     generate_integrated_analysis_report,
 )
 
+# Define base paths
+base_path = Path(r"\\e")
+workdata_path = base_path / "dir" / "dir" / "dir" / "dir" / "dir"
+data_path = base_path / "dir"
+
 # Manually create the Config object
 config = Config(
-    BASE_DIR=Path(r"\\e\workdata\708245\CDEF\Projekter\Family"),
-    OUTPUT_DIR=Path(r"\\e\workdata\708245\CDEF\Projekter\Family\output"),
-    CSV_DIR=Path(r"\\e\data"),
-    PARQUET_DIR=Path(r"\\e"),
+    BASE_DIR=workdata_path,
+    OUTPUT_DIR=workdata_path / "output",
+    CSV_DIR=data_path,
+    PARQUET_DIR=base_path,
     START_YEAR=2000,
     END_YEAR=2022,
     REGISTERS={
         "LPR_DIAG": RegisterConfig(
-            file_pattern="lpr_diag_{year}.parquet", location=r"\\e\data\lpr_diag"
+            file_pattern="lpr_diag_{year}.parquet", location=str(data_path / "lpr_diag")
         ),
-        "MFR": RegisterConfig(file_pattern="mfr_{year}.parquet", location=r"\\e\data\mfr"),
-        "AKM": RegisterConfig(file_pattern="akm_{year}.parquet", location=r"\\e\akm"),
-        "FAIK": RegisterConfig(file_pattern="faik_{year}.parquet", location=r"\\e\data\faik"),
-        "IND": RegisterConfig(file_pattern="ind_{year}.parquet", location=r"\\e\data\ind"),
-        "BEF": RegisterConfig(file_pattern="bef_{year}.parquet", location=r"\\e\bef"),
-        "UDDF": RegisterConfig(file_pattern="uddf_{year}.parquet", location=r"\\e\data\uddf"),
+        "MFR": RegisterConfig(file_pattern="mfr_{year}.parquet", location=str(data_path / "mfr")),
+        "AKM": RegisterConfig(file_pattern="akm_{year}.parquet", location=str(base_path / "akm")),
+        "FAIK": RegisterConfig(
+            file_pattern="faik_{year}.parquet", location=str(data_path / "faik")
+        ),
+        "IND": RegisterConfig(file_pattern="ind_{year}.parquet", location=str(data_path / "ind")),
+        "BEF": RegisterConfig(file_pattern="bef_{year}.parquet", location=str(base_path / "bef")),
+        "UDDF": RegisterConfig(
+            file_pattern="uddf_{year}.parquet", location=str(data_path / "uddf")
+        ),
     },
     TABLE_NAMES=[
         "Person",
@@ -79,7 +88,7 @@ config = Config(
         "SAGSART",
         "C_PATTYPE",
     ],
-    ICD10_CODES_FILE=Path(r"\\e\workdata\708245\CDEF\Projekter\Family\data\icd10.csv"),
+    ICD10_CODES_FILE=workdata_path / "data" / "icd10.csv",
 )
 
 # Now you can use this config object to run your functionality
