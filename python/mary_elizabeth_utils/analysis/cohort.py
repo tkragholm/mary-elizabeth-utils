@@ -1,22 +1,20 @@
-from pathlib import Path
-
 import polars as pl
 
+from ..config.config import Config
 from ..utils.caching import cache_result
 
 
 @cache_result("cache")
 def create_cohorts(
-    tables: dict[str, pl.LazyFrame], config: dict, icd10_codes: dict[str, str]
+    tables: dict[str, pl.LazyFrame], config: Config, icd10_codes: dict[str, str]
 ) -> tuple[pl.LazyFrame, pl.LazyFrame]:
     severe_chronic_cases = identify_severe_chronic_cases(tables, icd10_codes)
     exposed_group = create_exposed_group(severe_chronic_cases, tables)
     unexposed_pool = create_unexposed_group(tables)
     exposed_cohort, unexposed_cohort = match_cohorts(exposed_group, unexposed_pool)
 
-    output_dir = Path(config["output_dir"])
-    exposed_cohort.collect().write_parquet(output_dir / "exposed_cohort.parquet")
-    unexposed_cohort.collect().write_parquet(output_dir / "unexposed_cohort.parquet")
+    exposed_cohort.collect().write_parquet(config.OUTPUT_DIR / "exposed_cohort.parquet")
+    unexposed_cohort.collect().write_parquet(config.OUTPUT_DIR / "unexposed_cohort.parquet")
 
     return exposed_cohort, unexposed_cohort
 

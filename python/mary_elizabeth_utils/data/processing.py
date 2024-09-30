@@ -1,11 +1,10 @@
 from collections.abc import Mapping
 
 import polars as pl
-import yaml
 from tqdm import tqdm
 
 from ..analysis.cohort import create_cohorts
-from ..config.config import Config
+from ..config.config import Config, load_config
 from ..data.loading import load_all_register_data, load_icd10_codes, process_all_data
 from ..data.transformation import transform_data
 from ..data.validation import check_logical_consistency, check_missing_values, check_outliers
@@ -21,9 +20,7 @@ from ..utils.reports import (
 
 class DataProcessor:
     def __init__(self, config_path: str):
-        with open(config_path) as f:
-            config_dict = yaml.safe_load(f)
-        self.config: Config = Config.from_dict(config_dict)
+        self.config: Config = load_config(config_path)
         self.register_data: Mapping[str, pl.LazyFrame | None] = {}
         self.tables: Mapping[str, pl.LazyFrame | None] = {}
 

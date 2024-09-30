@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 def load_all_register_data(config: Config) -> Mapping[str, pl.LazyFrame | None]:
     register_data: dict[str, pl.LazyFrame | None] = {}
     for register, register_config in config.REGISTERS.items():
-        years = list(range(config.START_YEAR, config.END_YEAR + 1))
+        years = register_config.years or list(range(config.START_YEAR, config.END_YEAR + 1))
         register_data[register] = load_register_data(
             register, years, register_config, config.BASE_DIR
         )

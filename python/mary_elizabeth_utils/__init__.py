@@ -15,7 +15,7 @@ from .analysis.statistics import (
     plot_categorical_comparisons,
     plot_numeric_comparisons,
 )
-from .config.config import Config
+from .config.config import Config, load_config
 from .data.loading import load_icd10_codes, load_register_data
 from .data.processing import DataProcessor
 
@@ -56,6 +56,7 @@ __version__ = VERSION
 __all__ = [
     # Config
     "Config",
+    "load_config",
     # Data
     "load_icd10_codes",
     "load_register_data",
