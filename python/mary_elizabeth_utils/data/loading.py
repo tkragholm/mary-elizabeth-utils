@@ -117,31 +117,45 @@ def load_register_data(
 ) -> pl.LazyFrame:
     try:
         dfs = []
-        # Check if the register has specific years defined
         years_to_load = register_config.years or years
 
         for year in years_to_load:
-            file_path = register_config.get_file_path(year, base_dir)
-            logger.debug(f"Attempting to load file for {register}, year {year}: {file_path}")
+            if register_config.include_month:
+                if register_config.combined_year_month:
+                    pattern = (
+                        register_config.get_file_path(year, "*", base_dir).parent
+                        / f"{register}_{year}*.parquet"
+                    )
+                else:
+                    pattern = register_config.get_file_path(year, "*", base_dir)
 
-            if not file_path.exists():
-                raise FileNotFoundError(
-                    f"Data file not found for {register}, year {year}: {file_path}"
-                )
+                file_paths = list(base_dir.glob(str(pattern.relative_to(base_dir))))
 
-            logger.info(f"Loading file: {file_path}")
+                for file_path in file_paths:
+                    df = load_file(file_path)
+                    if register_config.combined_year_month:
+                        yearmonth = file_path.stem.split("_")[-1]
+                        file_year = int(yearmonth[:4])
+                        month = int(yearmonth[4:])
+                    else:
+                        month = int(file_path.stem.split("_")[-1])
+                        file_year = year
 
-            if file_path.suffix.lower() == ".parquet":
-                df = pl.scan_parquet(file_path)
-            elif file_path.suffix.lower() == ".csv":
-                df = pl.scan_csv(file_path)
+                    df = df.with_columns(
+                        [pl.lit(file_year).alias("year"), pl.lit(month).alias("month")]
+                    )
+                    dfs.append(df)
             else:
-                raise ValueError(
-                    f"Unsupported file format for {register}, year {year}: {file_path}"
-                )
+                # For registers with only year in the filename
+                file_path = register_config.get_file_path(year, None, base_dir)
+                if not file_path.exists():
+                    raise FileNotFoundError(
+                        f"Data file not found for {register}, year {year}: {file_path}"
+                    )
 
-            df = df.with_columns(pl.lit(year).alias("year"))
-            dfs.append(df)
+                df = load_file(file_path)
+                df = df.with_columns(pl.lit(year).alias("year"))
+                dfs.append(df)
 
         return pl.concat(dfs)
     except FileNotFoundError as e:
@@ -153,3 +167,13 @@ def load_register_data(
     except Exception as e:
         logger.error(f"Error loading data for register {register}: {e!s}")
         raise
+
+
+def load_file(file_path: Path) -> pl.LazyFrame:
+    logger.info(f"Loading file: {file_path}")
+    if file_path.suffix.lower() == ".parquet":
+        return pl.scan_parquet(str(file_path))
+    elif file_path.suffix.lower() == ".csv":
+        return pl.scan_csv(str(file_path))
+    else:
+        raise ValueError(f"Unsupported file format: {file_path}")

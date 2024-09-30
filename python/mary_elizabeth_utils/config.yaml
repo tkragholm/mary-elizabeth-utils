@@ -27,8 +27,10 @@ registers:
     file_pattern: "ind_{year}.parquet"
     location: "${csv_dir}/ind"
   BEF:
-    file_pattern: "bef_{year}.parquet"
+    file_pattern: "bef_{yearmonth}.parquet"
     location: "${parquet_dir}/bef"
+    include_month: true
+    combined_year_month: true
   UDDF:
     file_pattern: "uddf_{year}.parquet"
     location: "${csv_dir}/uddf"

@@ -9,12 +9,23 @@ class RegisterConfig(BaseModel):
     file_pattern: str
     location: str
     years: list[int] | None | None = None
+    include_month: bool = False
+    combined_year_month: bool = False
 
-    def get_file_path(self, year: int, base_dir: Path) -> Path:
+    def get_file_path(self, year: int, month: int | str | None, base_dir: Path) -> Path:
         location = Path(self.location)
         if not location.is_absolute():
             location = base_dir / location
-        return location / self.file_pattern.format(year=year)
+
+        if self.include_month:
+            if self.combined_year_month:
+                return location / self.file_pattern.format(
+                    yearmonth=f"{year}{'*' if month == '*' else f'{month:02d}'}"
+                )
+            else:
+                return location / self.file_pattern.format(year=year, month=month)
+        else:
+            return location / self.file_pattern.format(year=year)
 
 
 class Config(BaseModel):
