@@ -32,6 +32,52 @@ registers:
   UDDF:
     file_pattern: "uddf_{year}.parquet"
     location: "${csv_dir}/uddf"
+    years: [2020, 2022]
+  DOD:
+    file_pattern: "dod_{year}.parquet"
+    location: "${csv_dir}/dod"
+  DODSAARS:
+    file_pattern: "dodsaars_{year}.parquet"
+    location: "${csv_dir}/dodsaars"
+  DODSAASG:
+    file_pattern: "dodsaasg_{year}.parquet"
+    location: "${csv_dir}/dodsaasg"
+  FTBARN:
+    file_pattern: "ftbarn_{year}.parquet"
+    location: "${csv_dir}/ftbarn"
+  HANDIC:
+    file_pattern: "handic_{year}.parquet"
+    location: "${csv_dir}/handic"
+  UDFK:
+    file_pattern: "udfk_{year}.parquet"
+    location: "${csv_dir}/udfk"
+  VNDS:
+    file_pattern: "vnds_{year}.parquet"
+    location: "${csv_dir}/vnds"
+  LPR_ADM:
+    file_pattern: "lpr_adm_{year}.parquet"
+    location: "${csv_dir}/lpr_adm"
+  PRIV_DIAG:
+    file_pattern: "priv_diag_{year}.parquet"
+    location: "${csv_dir}/priv_diag"
+  PRIV_ADM:
+    file_pattern: "priv_adm_{year}.parquet"
+    location: "${csv_dir}/priv_adm"
+  PSYK_DIAG:
+    file_pattern: "psyk_diag_{year}.parquet"
+    location: "${csv_dir}/psyk_diag"
+  PSYK_ADM:
+    file_pattern: "psyk_adm_{year}.parquet"
+    location: "${csv_dir}/psyk_adm"
+  LPR_SKSOPR:
+    file_pattern: "lpr_sksopr_{year}.parquet"
+    location: "${csv_dir}/lpr_sksopr"
+  PRIV_SKSOPR:
+    file_pattern: "priv_sksopr_{year}.parquet"
+    location: "${csv_dir}/priv_sksopr"
+  IDAN:
+    file_pattern: "idan_{year}.parquet"
+    location: "${csv_dir}/idan"
 
 # Table names
 table_names:
@@ -48,6 +94,9 @@ table_names:
   - Birth
   - SocioEconomic
   - Psychiatric
+  - Disability
+  - EducationDetails
+  - Migration
 
 # Path to the CSV file containing ICD-10 codes
 icd10_codes_file: "${base_dir}/data/icd10.csv"

@@ -24,6 +24,8 @@ dependencies = [
     "numpy",
     "colorama",
     "pyyaml",
+    "tqdm",
+    "pydantic",
 ]
 
 [project.scripts]
@@ -36,9 +38,20 @@ python-source = "python"
 #features = ["pyo3/extension-module"]
 #include = ["python/mary_elizabeth_utils/bin/*"]
 
+[tool.pytype]
+inputs = ['mary-elizabeth-utils']
+
 [tool.mypy]
 check_untyped_defs = true
 disallow_untyped_defs = true
+disallow_any_unimported = true
+no_implicit_optional = true
+warn_return_any = true
+warn_unused_ignores = true
+show_error_codes = true
+ignore_missing_imports = true
+implicit_reexport = true
+
 
 [[tool.mypy.overrides]]
 module = ["tests.*"]
@@ -57,7 +70,20 @@ target-version = "py312"
 fix = true
 
 [tool.ruff.lint]
-select = ["E", "B", "F", "UP", "I001", "T201", "T203"]
+select = [
+    "E",
+    "B",
+    "F",
+    "UP",
+    "I001",
+    "T201",
+    "T203",
+    "I",
+    "N",
+    "UP",
+    "PL",
+    "RUF",
+]
 ignore = [
     "E501",
     "W191",

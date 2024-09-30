@@ -16,14 +16,15 @@ from .analysis.statistics import (
     plot_numeric_comparisons,
 )
 from .config.config import Config
+from .data.loading import load_icd10_codes, load_register_data
+from .data.processing import DataProcessor
 
 # Data
-from .data.loading import (
+from .data.table_creation import (
     create_child_table,
     create_diagnosis_table,
     create_education_table,
     create_employment_table,
-    create_family_table,
     create_healthcare_table,
     create_person_child_table,
     create_person_family_table,
@@ -32,10 +33,7 @@ from .data.loading import (
     create_socioeconomic_status_table,
     create_time_table,
     create_treatment_period_table,
-    load_icd10_codes,
-    load_register_data,
 )
-from .data.processing import DataProcessor
 from .data.transformation import impute_missing_values, transform_data
 from .data.validation import check_logical_consistency, check_missing_values, check_outliers
 
@@ -62,7 +60,6 @@ __all__ = [
     "load_icd10_codes",
     "load_register_data",
     "create_person_table",
-    "create_family_table",
     "create_child_table",
     "create_diagnosis_table",
     "create_employment_table",

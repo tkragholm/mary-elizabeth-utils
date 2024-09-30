@@ -4,6 +4,29 @@ from collections.abc import Callable
 import polars as pl
 
 
+def check_required_columns(
+    df: pl.LazyFrame | None, required_columns: list[str], data_name: str
+) -> None:
+    """
+    Check if the DataFrame contains all required columns.
+
+    Args:
+        df (Optional[pl.LazyFrame]): The DataFrame to check.
+        required_columns (List[str]): List of required column names.
+        data_name (str): Name of the data source for logging purposes.
+
+    Raises:
+        ValueError: If df is None or if any required columns are missing.
+    """
+    if df is None:
+        raise ValueError(f"{data_name} data is None")
+    missing_columns = [col for col in required_columns if col not in df.columns]
+    if missing_columns:
+        raise ValueError(
+            f"Missing required columns in {data_name} data: {', '.join(missing_columns)}"
+        )
+
+
 def check_missing_values(
     df: pl.LazyFrame, table_name: str, logger: logging.Logger | None = None
 ) -> None:
@@ -76,7 +99,7 @@ def check_outliers(
             if outlier_count > 0:
                 log_message(logger, f"  {column}: {outlier_count} outliers detected", "warning")
         except Exception as e:
-            log_message(logger, f"Error checking outliers for column {column}: {str(e)}", "error")
+            log_message(logger, f"Error checking outliers for column {column}: {e!s}", "error")
 
 
 def check_logical_consistency(
@@ -117,7 +140,7 @@ def check_logical_consistency(
                     "warning",
                 )
         except Exception as e:
-            log_message(logger, f"Error checking consistency rule '{rule_name}': {str(e)}", "error")
+            log_message(logger, f"Error checking consistency rule '{rule_name}': {e!s}", "error")
 
 
 def log_message(logger: logging.Logger | None, message: str, level: str = "info") -> None:

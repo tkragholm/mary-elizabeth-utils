@@ -9,7 +9,7 @@ def main() -> None:
         processor.run()
         logger.info("Data processing pipeline completed successfully")
     except Exception as e:
-        logger.error(f"Error in data processing pipeline: {str(e)}")
+        logger.error(f"Error in data processing pipeline: {e!s}")
         raise
 
 

@@ -1,4 +1,5 @@
 import logging
+from collections.abc import Mapping
 
 import polars as pl
 
@@ -48,21 +49,27 @@ def apply_custom_transformations(df: pl.LazyFrame) -> pl.LazyFrame:
     return df
 
 
-def transform_data(tables: dict[str, pl.LazyFrame], config: Config) -> dict[str, pl.LazyFrame]:
+def transform_data(
+    tables: Mapping[str, pl.LazyFrame | None], config: Config
+) -> Mapping[str, pl.LazyFrame | None]:
     """
     Apply transformations to all tables.
 
     Args:
-        tables (Dict[str, pl.LazyFrame]): Dictionary of tables to transform.
-        config (Dict): Configuration dictionary containing numeric and categorical column lists.
+        tables (Dict[str, pl.LazyFrame | None]): Dictionary of tables to transform.
+        config (Config): Configuration object containing numeric and categorical column lists.
 
     Returns:
-        Dict[str, pl.LazyFrame]: Dictionary of transformed tables.
+        Dict[str, pl.LazyFrame | None]: Dictionary of transformed tables.
     """
-    transformed_tables = {}
-    for name, df in tables.items():
-        if df is not None:
-            df = impute_missing_values(df, config.NUMERIC_COLS, config.CATEGORICAL_COLS)
-            df = apply_custom_transformations(df)
-            transformed_tables[name] = df
+    transformed_tables: dict[str, pl.LazyFrame | None] = {}
+    for name, table_df in tables.items():
+        if table_df is not None:
+            imputed_df = impute_missing_values(
+                table_df, config.NUMERIC_COLS, config.CATEGORICAL_COLS
+            )
+            transformed_df = apply_custom_transformations(imputed_df)
+            transformed_tables[name] = transformed_df
+        else:
+            transformed_tables[name] = None
     return transformed_tables

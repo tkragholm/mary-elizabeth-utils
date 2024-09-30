@@ -2,7 +2,7 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import polars as pl
-import seaborn as sns  # type: ignore
+import seaborn as sns
 
 
 def generate_summary_statistics(

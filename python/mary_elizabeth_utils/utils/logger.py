@@ -1,5 +1,6 @@
 import logging
 from logging import LogRecord
+from typing import ClassVar
 
 from colorama import Back, Fore, Style, init
 
@@ -8,7 +9,7 @@ init(autoreset=True)
 
 
 class ColoredFormatter(logging.Formatter):
-    COLORS = {
+    COLORS: ClassVar[dict[str, str]] = {
         "DEBUG": Fore.CYAN,
         "INFO": Fore.GREEN,
         "WARNING": Fore.YELLOW,

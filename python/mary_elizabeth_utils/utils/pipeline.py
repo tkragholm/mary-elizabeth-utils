@@ -16,5 +16,5 @@ class Pipeline:
             try:
                 step()
             except Exception as e:
-                self.logger.error(f"Error in step {i} ({step.__name__}): {str(e)}")
+                self.logger.error(f"Error in step {i} ({step.__name__}): {e!s}")
                 raise
