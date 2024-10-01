@@ -61,27 +61,35 @@ def check_missing_values(
 def check_outliers(
     df: pl.LazyFrame,
     table_name: str,
-    numeric_columns: list[str],
+    numeric_columns: dict[str, list[str]],
     logger: logging.Logger | None = None,
 ) -> None:
-    """
-    Check for outliers in numeric columns of the DataFrame and log the results.
+    if table_name not in numeric_columns:
+        log_message(
+            logger,
+            f"No numeric columns defined for {table_name}, skipping outlier detection",
+            "info",
+        )
+        return
 
-    Args:
-        df (pl.LazyFrame): The LazyFrame to check for outliers.
-        table_name (str): The name of the table being checked.
-        numeric_columns (List[str]): List of numeric column names to check for outliers.
-        logger (Optional[logging.Logger]): Logger to use for logging messages.
+    columns_to_check = numeric_columns[table_name]
+    if not columns_to_check:
+        log_message(logger, f"No numeric columns to check for {table_name}", "info")
+        return
 
-    Raises:
-        ValueError: If no numeric columns are provided.
-    """
-    if not numeric_columns:
-        raise ValueError("No numeric columns provided for outlier detection.")
-
+    available_columns = set(df.collect_schema().names())
     log_message(logger, f"Outlier report for {table_name}:", "info")
-    for column in numeric_columns:
+    for column in columns_to_check:
+        if column not in available_columns:
+            log_message(logger, f"Column {column} not found in {table_name}, skipping", "warning")
+            continue
+
         try:
+            col_type = df.collect_schema()[column]
+            if col_type in [pl.Date, pl.Datetime]:
+                log_message(logger, f"Skipping outlier detection for date column: {column}", "info")
+                continue
+
             q1, q3 = (
                 df.select(
                     [
@@ -99,7 +107,7 @@ def check_outliers(
             if outlier_count > 0:
                 log_message(logger, f"  {column}: {outlier_count} outliers detected", "warning")
         except Exception as e:
-            log_message(logger, f"Error checking outliers for column {column}: {e!s}", "error")
+            log_message(logger, f"Error checking outliers for column {column}: {e}", "error")
 
 
 def check_logical_consistency(
@@ -116,9 +124,6 @@ def check_logical_consistency(
         table_name (str): The name of the table being checked.
         rules (Optional[Dict[str, Callable[[pl.LazyFrame], pl.Expr]]]): Dictionary of rule names and their corresponding check functions.
         logger (Optional[logging.Logger]): Logger to use for logging messages.
-
-    Raises:
-        ValueError: If no consistency rules are provided.
     """
     if rules is None:
         rules = {}
@@ -127,7 +132,8 @@ def check_logical_consistency(
             rules["invalid_birth_dates"] = lambda df: pl.col("birth_date") > pl.date(2023, 1, 1)
 
     if not rules:
-        raise ValueError("No consistency rules provided.")
+        log_message(logger, f"No consistency rules defined for {table_name}", "warning")
+        return
 
     log_message(logger, f"Logical consistency report for {table_name}:", "info")
     for rule_name, rule_func in rules.items():
@@ -140,7 +146,7 @@ def check_logical_consistency(
                     "warning",
                 )
         except Exception as e:
-            log_message(logger, f"Error checking consistency rule '{rule_name}': {e!s}", "error")
+            log_message(logger, f"Error checking consistency rule '{rule_name}': {e}", "error")
 
 
 def log_message(logger: logging.Logger | None, message: str, level: str = "info") -> None:

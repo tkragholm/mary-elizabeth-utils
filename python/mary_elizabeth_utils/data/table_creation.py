@@ -43,8 +43,21 @@ def create_table(
     """
     if df is None:
         return None
-    check_required_columns(df, required_columns, data_name)
-    return df.select([pl.col(col[0]).alias(col[1]).cast(col[2]) for col in columns])
+
+    available_columns = set(df.collect_schema().names())
+    missing_columns = set(required_columns) - available_columns
+    if missing_columns:
+        logger.warning(f"Missing columns in {data_name} data: {', '.join(missing_columns)}")
+
+    valid_columns = [
+        (orig, new, dtype) for orig, new, dtype in columns if orig in available_columns
+    ]
+
+    if not valid_columns:
+        logger.warning(f"No valid columns found for {data_name} data")
+        return None
+
+    return df.select([pl.col(col[0]).alias(col[1]).cast(col[2]) for col in valid_columns])
 
 
 def create_person_table(
@@ -56,10 +69,17 @@ def create_person_table(
     if bef_data is None:
         return None
 
+    # Get the available columns from bef_data
+    available_columns = set(bef_data.collect_schema().names())
+
     columns: list[tuple[str, str, Any]] = [
         ("PNR", "person_id", Utf8),
         ("FOED_DAG", "birth_date", Date),
         ("KOEN", "gender", Utf8),
+    ]
+
+    # Add optional columns if they are available
+    optional_columns = [
         ("KOM", "municipality_code", Utf8),
         ("IE_TYPE", "origin_type", Utf8),
         ("STATSB", "citizenship", Utf8),
@@ -73,12 +93,16 @@ def create_person_table(
         ("MOR_ID", "mother_id", Utf8),
         ("FAR_ID", "father_id", Utf8),
         ("AEGTE_ID", "spouse_id", Utf8),
-        # Family table columns
         ("FAMILIE_TYPE", "family_type", Utf8),
         ("ANTPERSF", "family_size", Int32),
         ("ANTBOERNF", "number_of_children", Int32),
         ("HUSTYPE", "household_type", Utf8),
     ]
+
+    for col in optional_columns:
+        if col[0] in available_columns:
+            columns.append(col)
+
     required_columns = [col[0] for col in columns]
     person_table = create_table(bef_data, columns, required_columns, "BEF")
 
@@ -91,6 +115,10 @@ def create_person_table(
         death_columns: list[tuple[str, str, Any]] = [
             ("PNR", "person_id", Utf8),
             ("DODDATO", "death_date", Date),
+        ]
+
+        # Add optional death-related columns if they are available
+        optional_death_columns = [
             ("C_DODSMAADE", "death_manner", Utf8),
             ("C_DOD1", "primary_cause", Utf8),
             ("C_DOD2", "secondary_cause1", Utf8),
@@ -98,10 +126,19 @@ def create_person_table(
             ("C_DOD4", "secondary_cause3", Utf8),
             ("C_DODTILGRUNDL_ACME", "underlying_cause", Utf8),
         ]
+
+        for col in optional_death_columns:
+            if (
+                col[0] in dod_data.collect_schema().names()
+                or col[0] in dodsaars_data.collect_schema().names()
+                or col[0] in dodsaasg_data.collect_schema().names()
+            ):
+                death_columns.append(col)
+
         death_required_columns = [col[0] for col in death_columns]
 
-        combined_death_data = dod_data.join(dodsaars_data, on="PNR", how="inner").join(
-            dodsaasg_data, on="PNR", how="inner"
+        combined_death_data = dod_data.join(dodsaars_data, on="PNR", how="outer").join(
+            dodsaasg_data, on="PNR", how="outer"
         )
 
         death_table = create_table(
@@ -145,6 +182,10 @@ def create_disability_table(handic_data: pl.LazyFrame | None) -> pl.LazyFrame | 
 
 
 def create_child_table(mfr_data: pl.LazyFrame | None) -> pl.LazyFrame | None:
+    if mfr_data is None:
+        logger.error("MFR data is missing, cannot create Child table")
+        return None
+
     columns: list[tuple[str, str, Any]] = [
         ("CPR_BARN", "child_id", Utf8),
         ("FAMILIE_ID", "family_id", Utf8),
@@ -155,7 +196,39 @@ def create_child_table(mfr_data: pl.LazyFrame | None) -> pl.LazyFrame | None:
         ("GESTATIONSALDER_BARN", "gestational_age", Int32),
     ]
     required_columns = [col[0] for col in columns]
-    return create_table(mfr_data, columns, required_columns, "MFR")
+    child_table = create_table(mfr_data, columns, required_columns, "MFR")
+
+    if child_table is not None:
+        logger.info(
+            f"Created Child table with {child_table.select(pl.count()).collect().item()} rows"
+        )
+    else:
+        logger.error("Failed to create Child table")
+
+    return child_table
+
+
+def link_children_to_parents(child_table: pl.LazyFrame, person_table: pl.LazyFrame) -> pl.LazyFrame:
+    return child_table.join(
+        person_table.select(["person_id", "mother_id", "father_id"]),
+        left_on="child_id",
+        right_on="person_id",
+    )
+
+
+def prepare_income_data(
+    income_table: pl.LazyFrame, parent_child_links: pl.LazyFrame
+) -> pl.LazyFrame:
+    return (
+        income_table.join(
+            parent_child_links,
+            left_on="person_id",
+            right_on=["mother_id", "father_id"],
+            how="inner",
+        )
+        .group_by(["child_id", "year"])
+        .agg([pl.col("total_income").sum().alias("parental_total_income")])
+    )
 
 
 def create_diagnosis_table(data: DiagnosisData) -> pl.LazyFrame | None:

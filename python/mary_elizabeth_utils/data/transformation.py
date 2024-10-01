@@ -52,21 +52,14 @@ def apply_custom_transformations(df: pl.LazyFrame) -> pl.LazyFrame:
 def transform_data(
     tables: Mapping[str, pl.LazyFrame | None], config: Config
 ) -> Mapping[str, pl.LazyFrame | None]:
-    """
-    Apply transformations to all tables.
-
-    Args:
-        tables (Dict[str, pl.LazyFrame | None]): Dictionary of tables to transform.
-        config (Config): Configuration object containing numeric and categorical column lists.
-
-    Returns:
-        Dict[str, pl.LazyFrame | None]: Dictionary of transformed tables.
-    """
     transformed_tables: dict[str, pl.LazyFrame | None] = {}
     for name, table_df in tables.items():
         if table_df is not None:
+            columns = table_df.collect_schema().names()
             imputed_df = impute_missing_values(
-                table_df, config.NUMERIC_COLS, config.CATEGORICAL_COLS
+                table_df,
+                [col for col in config.NUMERIC_COLS if col in columns],
+                [col for col in config.CATEGORICAL_COLS if col in columns],
             )
             transformed_df = apply_custom_transformations(imputed_df)
             transformed_tables[name] = transformed_df

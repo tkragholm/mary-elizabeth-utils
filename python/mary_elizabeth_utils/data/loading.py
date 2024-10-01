@@ -25,9 +25,13 @@ def load_all_register_data(config: Config) -> Mapping[str, pl.LazyFrame | None]:
     register_data: dict[str, pl.LazyFrame | None] = {}
     for register, register_config in config.REGISTERS.items():
         years = register_config.years or list(range(config.START_YEAR, config.END_YEAR + 1))
-        register_data[register] = load_register_data(
-            register, years, register_config, config.BASE_DIR
-        )
+        try:
+            register_data[register] = load_register_data(
+                register, years, register_config, config.BASE_DIR
+            )
+        except FileNotFoundError as e:
+            logger.warning(f"Could not load data for register {register}: {e}")
+            register_data[register] = None
     return register_data
 
 
@@ -56,13 +60,17 @@ def process_all_data(
     )
 
     tables["Diagnosis"] = create_diagnosis_table(diagnosis_data)
+    if tables["Diagnosis"] is None:
+        logger.warning("Unable to create Diagnosis table due to missing data")
     tables["Healthcare"] = create_healthcare_table(
         lpr_adm, priv_adm, psyk_adm, lpr_sksopr, priv_sksopr
     )
 
     mfr = register_data.get("MFR")
     if mfr is not None:
-        tables["Birth"] = create_child_table(mfr)
+        tables["Child"] = create_child_table(mfr)
+    else:
+        logger.warning("MFR data not found, Child table could not be created")
 
     lmdb = register_data.get("LMDB")
     if lmdb is not None:
@@ -72,7 +80,7 @@ def process_all_data(
     ind = register_data.get("IND")
     idan = register_data.get("IDAN")
     akm = register_data.get("AKM")
-    if ind is not None and idan is not None and akm is not None:
+    if ind is not None or idan is not None or akm is not None:
         tables["Employment"] = create_employment_table(ind, idan, akm)
 
     if ind is not None:
@@ -114,59 +122,38 @@ def load_icd10_codes(config: Config) -> dict[str, str]:
 
 def load_register_data(
     register: str, years: list[int], register_config: RegisterConfig, base_dir: Path
-) -> pl.LazyFrame:
+) -> pl.LazyFrame | None:
+    # Add logging to track which registers are being loaded
+    logger.info(f"Loading data for register: {register}")
     try:
+        # First, try to load a single file without year
+        file_path = register_config.get_file_path(0, None, base_dir)
+        if file_path.exists():
+            return load_file(file_path)
+
+        # If single file doesn't exist, try year-specific files
         dfs = []
         years_to_load = register_config.years or years
-
         for year in years_to_load:
-            if register_config.include_month:
-                if register_config.combined_year_month:
-                    pattern = (
-                        register_config.get_file_path(year, "*", base_dir).parent
-                        / f"{register}_{year}*.parquet"
-                    )
-                else:
-                    pattern = register_config.get_file_path(year, "*", base_dir)
-
-                file_paths = list(base_dir.glob(str(pattern.relative_to(base_dir))))
-
-                for file_path in file_paths:
-                    df = load_file(file_path)
-                    if register_config.combined_year_month:
-                        yearmonth = file_path.stem.split("_")[-1]
-                        file_year = int(yearmonth[:4])
-                        month = int(yearmonth[4:])
-                    else:
-                        month = int(file_path.stem.split("_")[-1])
-                        file_year = year
-
-                    df = df.with_columns(
-                        [pl.lit(file_year).alias("year"), pl.lit(month).alias("month")]
-                    )
-                    dfs.append(df)
-            else:
-                # For registers with only year in the filename
-                file_path = register_config.get_file_path(year, None, base_dir)
-                if not file_path.exists():
-                    raise FileNotFoundError(
-                        f"Data file not found for {register}, year {year}: {file_path}"
-                    )
-
+            file_path = register_config.get_file_path(year, None, base_dir)
+            if file_path.exists():
                 df = load_file(file_path)
                 df = df.with_columns(pl.lit(year).alias("year"))
                 dfs.append(df)
 
-        return pl.concat(dfs)
-    except FileNotFoundError as e:
-        logger.error(f"File not found: {e!s}")
-        raise
-    except ValueError as e:
-        logger.error(f"Unsupported file format: {e!s}")
-        raise
+        if dfs:
+            combined_df = pl.concat(dfs)
+            logger.info(
+                f"Loaded {combined_df.select(pl.count()).collect().item()} rows for {register}"
+            )
+            return combined_df
+        else:
+            logger.warning(f"No data files found for register {register}")
+            return None
+
     except Exception as e:
-        logger.error(f"Error loading data for register {register}: {e!s}")
-        raise
+        logger.error(f"Error loading data for register {register}: {e}")
+        return None
 
 
 def load_file(file_path: Path) -> pl.LazyFrame:
