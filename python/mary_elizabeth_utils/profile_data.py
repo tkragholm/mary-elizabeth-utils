@@ -4,8 +4,8 @@ import re
 import traceback
 from pathlib import Path
 
+import numpy as np
 import polars as pl
-import polars.selectors as cs
 import pyarrow as pa
 import pyarrow.csv as pa_csv
 import pyarrow.parquet as pq
@@ -15,6 +15,7 @@ from rich import print as rprint
 from rich.console import Console
 from rich.logging import RichHandler
 from rich.progress import Progress, TaskID
+from ydata_profiling import ProfileReport
 
 # Set up rich console and logging
 console = Console()
@@ -128,6 +129,15 @@ def analyze_register(file_path: Path, progress: Progress, task: TaskID):
         progress.update(task, description=f"Analyzing {file_path.name}")
         df = read_file(file_path)
 
+        # Convert Polars DataFrame to Pandas DataFrame for ydata-profiling
+        pandas_df = df.to_pandas()
+
+        # Generate ProfileReport
+        profile = ProfileReport(pandas_df, minimal=True, explorative=True)
+
+        # Get the report data
+        report_data = profile.get_description()
+
         summary = {
             "file_name": file_path.name,
             "num_rows": len(df),
@@ -144,58 +154,56 @@ def analyze_register(file_path: Path, progress: Progress, task: TaskID):
                 }
 
                 if col not in SPECIAL_VARS:
-                    if col in df.select(cs.numeric()).columns:
+                    # Use ydata-profiling for advanced type inference and statistics
+                    col_profile = report_data.variables[col]
+
+                    col_summary["type"] = col_profile.type
+
+                    if col_profile.type == "Numeric":
                         col_summary.update(
                             {
-                                "min": safe_float(df[col].min()),
-                                "max": safe_float(df[col].max()),
-                                "mean": safe_float(df[col].mean()),
-                                "median": safe_float(df[col].median()),
-                                "std": safe_float(df[col].std()),
+                                "min": col_profile.min,
+                                "max": col_profile.max,
+                                "mean": col_profile.mean,
+                                "median": col_profile.median,
+                                "std": col_profile.std,
+                                "skewness": col_profile.skewness,
+                                "kurtosis": col_profile.kurtosis,
+                                "quantiles": {
+                                    "25%": col_profile.quantile_25,
+                                    "50%": col_profile.quantile_50,
+                                    "75%": col_profile.quantile_75,
+                                },
                             }
                         )
-                    elif col in df.select(cs.temporal()).columns:
-                        min_date = df[col].min()
-                        max_date = df[col].max()
+                    elif col_profile.type == "DateTime":
                         col_summary.update(
                             {
-                                "min": safe_date_parse(min_date),
-                                "max": safe_date_parse(max_date),
+                                "min": col_profile.min,
+                                "max": col_profile.max,
                             }
                         )
 
-                    # Check for categorical variables
-                    if is_categorical(df[col]):
+                    # Dynamic threshold for categorical variables
+                    n_unique = df[col].n_unique()
+                    n_total = len(df)
+                    threshold = 1 - np.exp(-0.1 * np.log(n_total))
+
+                    if n_unique / n_total < threshold:
                         col_summary["is_categorical"] = True
-                        try:
-                            value_counts = df.select(
-                                pl.col(col).value_counts(sort=True).alias("value_counts")
-                            )
-                            top_10_values = value_counts.select(
-                                pl.col("value_counts").struct.field(col).alias("value"),
-                                pl.col("value_counts").struct.field("count").alias("count"),
-                            )
-                            col_summary["top_10_values"] = [
-                                {"value": str(row["value"]), "count": int(row["count"])}
-                                for row in top_10_values.limit(10).to_dicts()
-                            ]
-                        except Exception as vc_error:
-                            col_summary["value_counts_error"] = str(vc_error)
+                        value_counts = df.select(
+                            pl.col(col).value_counts(sort=True).alias("value_counts")
+                        )
+                        top_10_values = value_counts.select(
+                            pl.col("value_counts").struct.field(col).alias("value"),
+                            pl.col("value_counts").struct.field("count").alias("count"),
+                        )
+                        col_summary["top_10_values"] = [
+                            {"value": str(row["value"]), "count": int(row["count"])}
+                            for row in top_10_values.limit(10).to_dicts()
+                        ]
                     else:
                         col_summary["is_categorical"] = False
-
-                    # Check for potential date columns in string type
-                    if df[col].dtype == pl.Utf8:
-                        sample = df[col].drop_nulls().head(100)
-                        potential_dates = [safe_date_parse(val) for val in sample]
-                        if any(potential_dates):
-                            col_summary["potential_date_column"] = True
-                            col_summary.update(
-                                {
-                                    "min": safe_date_parse(df[col].min()),
-                                    "max": safe_date_parse(df[col].max()),
-                                }
-                            )
 
                 summary["columns"][col] = col_summary
             except Exception as e:

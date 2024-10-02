@@ -29,6 +29,7 @@ dependencies = [
     "rich",
     "python-dateutil",
     "pyarrow",
+    "ydata-profiling",
 ]
 
 [project.scripts]
