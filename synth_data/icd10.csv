@@ -1,0 +1,50 @@
+ICD10-codes,Diagnoses
+C00.0-C99.1,Malignant neoplasms
+D61.0; D61.3; D61.8-D61.9,Aplastic anaemias
+D76.2,"Haemophagocytic syndrome, infection-associated"
+D80.0-D82.9,Immunodeficiencies
+E10,Insulin-dependent diabetes mellitus
+E25,Adrenogenital disorders
+E70.0-E73.0,Disorders of amino-acid metabolism
+E74.0-E84.9,Disorders of metabolism and cystic fibrosis
+G12,Spinal muscular atrophy and related syndromes
+G31.0; G31.8–G31.9; G37.0–G37.9,Degenerative and demyelinating diseases of nervous system
+G40,Epilepsy
+G60,Hereditary and idiopathic neuropathy
+G70.2,Congenital and developmental myasthenia
+G71.0-G71.3,Mitochondrial myopathy
+G73.6,Myopathy in metabolic diseases
+G80,Cerebral palsy
+G81.1; G82.1; G82.4,Spastic conditions
+G91,Hydrocephalus
+G94.1,Hydrocephalus in neoplastic disease
+I12,Hypertensive renal disease without renal failure
+I27.0-I27.9,Pulmonary heart disease
+I30.0-I52.8,Other forms of heart disease
+J44.8,Other specified chronic obstructive pulmonary disease
+J84,Other interstitial pulmonary diseases
+K21,Gastro-oesophageal reflux disease
+K50.0–K51.9,Crohn disease [regional enteritis] and ulcerative colitis
+K70.0-K77.8,Diseases of liver
+K90,Intestinal malabsorption
+M30.0-M35.9,Systemic involvement of connective tissue
+N03-N05,Nephritic syndrome
+N07,"Hereditary nephropathy, not elsewhere classified"
+N13,Obstructive and reflux uropathy
+N18.0-N19.9; N25.0-N27.9,Chronic kidney disease
+P27,Chronic respiratory disease originating in the perinatal period
+P57.0-P57.9,Kernicterus
+P91.0-P91.2,Disturbances of cerebral status of newborn
+P94.1-P94.9,Disorders of muscle tone of newborn
+Q01-Q07,Congenital malformations of the nervous system
+Q20.0-Q26.9,Congenital malformations of the circulatory system
+Q30.0-Q32.4,"Congenital malformations of nose, larynx, trachea and bronchus"
+Q33.0-Q33.9,Congenital malformations of lung
+Q34.0-Q37.9,"Other congenital malformations of respiratory system, cleft lip and cleft palate"
+Q39.0-Q45.3,"Congenital malformations of upper alimentary tract, intestine and pancreas"
+Q60.0-Q64.9,Congenital malformations of the urinary system
+Q79.0,Congenital diaphragmatic hernia
+Q79.2-Q79.3,Exomphalos and gastroschisis
+Q86.0,Fetal alcohol syndrome (dysmorphic)
+Q87,Other specified congenital malformation syndromes affecting multiple systems
+Q90.0-Q99.9,"Chromosomal abnormalities, not elsewhere classified"

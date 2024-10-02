@@ -26,6 +26,8 @@ dependencies = [
     "pyyaml",
     "tqdm",
     "pydantic",
+    "rich",
+    "python-dateutil",
 ]
 
 [project.scripts]
@@ -52,7 +54,7 @@ show_error_codes = true
 ignore_missing_imports = true
 implicit_reexport = true
 
-exclude = ['generate_data.py', 'test_pipeline.py']
+exclude = ['generate_data.py', 'test_pipeline.py', 'profile_data.py', 'mwx.py']
 
 [[tool.mypy.overrides]]
 module = ["tests.*"]
@@ -70,21 +72,10 @@ line-length = 100
 target-version = "py312"
 fix = true
 
+exclude = ['generate_data.py', 'mwx.py']
+
 [tool.ruff.lint]
-select = [
-    "E",
-    "B",
-    "F",
-    "UP",
-    "I001",
-    "T201",
-    "T203",
-    "I",
-    "N",
-    "UP",
-    "PL",
-    "RUF",
-]
+select = ["E", "B", "F", "UP", "I001", "T203", "I", "N", "UP", "PL", "RUF"]
 ignore = [
     "E501",
     "W191",
@@ -101,4 +92,5 @@ ignore = [
     "COM819",
     "ISC001",
     "ISC002",
+    "T201",
 ]

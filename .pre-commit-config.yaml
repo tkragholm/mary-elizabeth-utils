@@ -25,6 +25,8 @@ repos:
             numpy,
             pydantic,
           ]
+        exclude: ^python/mary_elizabeth_utils/(mwx|profile_data)\.py$
+
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.6.4
     hooks:

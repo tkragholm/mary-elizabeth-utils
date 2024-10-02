@@ -6,388 +6,503 @@ import numpy as np
 import polars as pl
 from mary_elizabeth_utils.utils.logger import setup_colored_logger
 
+from data_config import (
+    register_configs,
+    register_periods,
+)
+
 logger = setup_colored_logger(__name__)
 
+# Set a global seed for reproducibility
+np.random.seed(42)
 
-def random_date(start, end):
-    return start + timedelta(seconds=np.random.randint(0, int((end - start).total_seconds())))
+# Constants
+CENTURY_18 = 18
+CENTURY_19 = 19
+CENTURY_20 = 20
+YEAR_1937 = 1937
+MINIMUM_ADULT_AGE = 18
+YOUNG_ADULT_AGE = 25
+FEBRUARY = 2
+MINIMUM_PARENT_AGE = 15
+MAXIMUM_PARENT_AGE = 50
+MAXIMUM_FAMILY_SIZE = 10
+CHILD_PARENT_PROBABILITY = 0.8
+MINIMUM_EDUCATION_AGE = 16
+EARLY_EDUCATION_AGE = 20
+PROB = 0.8
+
+# Global caches
+ADDRESS_CACHE = {}
+PNR_CACHE = {}
+FAMILIE_ID_CACHE = {}
+FAMILIE_ID_HISTORY = {}
+RECNUM_CACHE = {}
 
 
-def generate_pnr_pool(num_pnrs=10000):
-    return [f"{np.random.randint(1000000000, 9999999999)}" for _ in range(num_pnrs)]
+def get_or_create_recnum(pnr, year):
+    key = (pnr, year)
+    if key not in RECNUM_CACHE:
+        RECNUM_CACHE[key] = np.random.randint(1000000, 9999999)
+    return RECNUM_CACHE[key]
 
 
-PNR_POOL = generate_pnr_pool()
+def generate_realistic_birth_date(year):
+    month = np.random.randint(1, 13)
+    if month in [4, 6, 9, 11]:
+        day = np.random.randint(1, 31)
+    elif month == FEBRUARY:
+        day = np.random.randint(1, 29)
+    else:
+        day = np.random.randint(1, 32)
+    return datetime(year, month, day)
 
 
-def get_random_pnr():
-    return np.random.choice(PNR_POOL)
+def get_appropriate_marital_status(age):
+    if age < MINIMUM_ADULT_AGE:
+        return "U"
+    elif age < YOUNG_ADULT_AGE:
+        return np.random.choice(["U", "G"], p=[0.8, 0.2])
+    else:
+        return np.random.choice(["U", "G", "F", "E"], p=[0.3, 0.5, 0.1, 0.1])
 
 
-def generate_data(config, num_records, year):
+def generate_parent_age(child_birth_year):
+    return child_birth_year - np.random.randint(20, 45)  # Parents are 20-45 years older than child
+
+
+def ensure_shared_address(data):
+    familie_addresses = {}
+    for row in data.iter_rows(named=True):
+        if row["FAMILIE_ID"] not in familie_addresses:
+            familie_addresses[row["FAMILIE_ID"]] = row["ADDRESS"]
+        else:
+            data = data.with_columns(
+                pl.when(pl.col("FAMILIE_ID") == row["FAMILIE_ID"])
+                .then(familie_addresses[row["FAMILIE_ID"]])
+                .otherwise(pl.col("ADDRESS"))
+                .alias("ADDRESS")
+            )
+    return data
+
+
+def check_age_consistency(birth_year, current_year, age):
+    return current_year - birth_year == age
+
+
+def check_parent_child_age_difference(parent_birth_year, child_birth_year):
+    age_difference = child_birth_year - parent_birth_year
+    return MINIMUM_PARENT_AGE <= age_difference <= MAXIMUM_PARENT_AGE
+
+
+def check_family_size(familie_id, data):
+    family_size = data.filter(pl.col("FAMILIE_ID") == familie_id).shape[0]
+    return family_size <= MAXIMUM_FAMILY_SIZE  # Adjust the maximum family size as needed
+
+
+def generate_improved_data(register_configs, num_records, year):
+    data = {}
+    for register, config in register_configs.items():
+        register_data = generate_register_data(config, num_records, year)
+
+        if register == "BEF":
+            register_data = improve_bef_data(register_data, year)
+
+        data[register] = register_data
+
+    return data
+
+
+def improve_bef_data(bef_data, year):
+    bef_data = bef_data.with_columns(
+        [
+            pl.col("FOED_DAG")
+            .map_elements(lambda x: generate_realistic_birth_date(x.year))
+            .alias("FOED_DAG"),
+            (pl.lit(year) - pl.col("FOED_DAG").dt.year()).alias("ALDER"),
+        ]
+    )
+
+    bef_data = bef_data.with_columns(
+        [
+            pl.col("ALDER").map_elements(get_appropriate_marital_status).alias("CIVST"),
+            pl.struct(["PNR", "ALDER", "CIVST"])
+            .map_elements(lambda x: generate_familie_id(x["PNR"], x["ALDER"], x["CIVST"]))
+            .alias("FAMILIE_ID"),
+        ]
+    )
+
+    # Ensure shared address for shared FAMILIE_ID
+    bef_data = ensure_shared_address(bef_data)
+
+    # Check family size
+    family_sizes = (
+        bef_data.group_by("FAMILIE_ID")
+        .agg(pl.count())
+        .filter(pl.col("count") > MAXIMUM_FAMILY_SIZE)
+    )
+    large_families = family_sizes["FAMILIE_ID"]
+
+    bef_data = bef_data.with_columns(
+        [
+            pl.when(pl.col("FAMILIE_ID").is_in(large_families))
+            .then(
+                pl.struct(["PNR", "ALDER", "CIVST"]).map_elements(
+                    lambda x: generate_familie_id(x["PNR"], x["ALDER"], x["CIVST"])
+                )
+            )
+            .otherwise(pl.col("FAMILIE_ID"))
+            .alias("FAMILIE_ID")
+        ]
+    )
+
+    return bef_data
+
+
+def generate_register_data(config, num_records, year):
     data = {}
     for col, col_config in config.items():
-        if col_config["type"] == "choice":
-            data[col] = np.random.choice(col_config["options"], num_records)
-        elif col_config["type"] == "int":
-            data[col] = np.random.randint(col_config["min"], col_config["max"], num_records)
-        elif col_config["type"] == "float":
-            data[col] = np.random.normal(col_config["mean"], col_config["std"], num_records)
+        if col_config["type"] == "pnr":
+            data[col] = pl.Series(
+                [
+                    get_or_create_pnr(
+                        generate_realistic_birth_date(year - np.random.randint(0, 100)),
+                        np.random.choice(["M", "K"]),
+                    )
+                    for _ in range(num_records)
+                ]
+            )
         elif col_config["type"] == "date":
-            start = max(col_config["start"], datetime(year, 1, 1))
-            end = min(col_config["end"], datetime(year, 12, 31))
-            if start >= end:
-                data[col] = [start] * num_records
-            else:
-                data[col] = [random_date(start, end) for _ in range(num_records)]
-        elif col_config["type"] == "pnr":
-            data[col] = [get_random_pnr() for _ in range(num_records)]
-        elif col_config["type"] == "string":
-            data[col] = [
-                f"{col_config['prefix']}{np.random.randint(col_config['min'], col_config['max'])}"
-                for _ in range(num_records)
-            ]
+            data[col] = pl.Series(
+                [
+                    generate_realistic_birth_date(
+                        np.random.randint(
+                            col_config["start"].year, min(col_config["end"].year, year) + 1
+                        )
+                    )
+                    for _ in range(num_records)
+                ]
+            )
+        # Add other column types as needed
+
     return pl.DataFrame(data)
 
 
-# Define configurations for each register
-register_configs = {
-    "BEF": {
-        "PNR": {"type": "pnr"},
-        "AEGTE_ID": {"type": "pnr"},
-        "ALDER": {"type": "int", "min": 0, "max": 100},
-        "ANTBOERNF": {"type": "int", "min": 0, "max": 5},
-        "ANTPERSF": {"type": "int", "min": 1, "max": 6},
-        "BOP_VFRA": {"type": "date", "start": datetime(1950, 1, 1), "end": datetime(2023, 12, 31)},
-        "CIVST": {"type": "choice", "options": ["U", "G", "F", "E", "L"]},
-        "CIV_VFRA": {"type": "date", "start": datetime(1950, 1, 1), "end": datetime(2023, 12, 31)},
-        "FAMILIE_ID": {"type": "string", "prefix": "F", "min": 100000, "max": 999999},
-        "FAMILIE_TYPE": {"type": "choice", "options": ["E", "F", "G"]},
-        "FAR_ID": {"type": "pnr"},
-        "FOED_DAG": {"type": "date", "start": datetime(1920, 1, 1), "end": datetime(2023, 12, 31)},
-        "IE_TYPE": {"type": "choice", "options": ["D", "I", "E"]},
-        "KOEN": {"type": "choice", "options": ["M", "K"]},
-        "KOM": {"type": "int", "min": 101, "max": 851},
-        "MOR_ID": {"type": "pnr"},
-        "OPR_LAND": {"type": "choice", "options": ["5100", "5110", "5120", "5130"]},
-        "STATSB": {"type": "choice", "options": ["5100", "5110", "5120", "5130"]},
-        "VERSION": {"type": "choice", "options": ["1", "2"]},
-        "CPRTJEK": {"type": "choice", "options": ["0", "1"]},
-        "CPRTYPE": {"type": "choice", "options": ["0", "1", "2", "3"]},
-        # Adding the missing variables
-        "PLADS": {"type": "choice", "options": ["1", "2", "3", "4", "5"]},  # Familiestatus
-        "HUSTYPE": {"type": "choice", "options": ["E", "F", "G", "H", "I"]},  # Husstandstype
-    },
-    "DOD": {
-        "PNR": {"type": "pnr"},
-        "DODDATO": {"type": "date", "start": datetime(2000, 1, 1), "end": datetime(2023, 12, 31)},
-        "CPRTJEK": {"type": "choice", "options": ["0", "1"]},
-        "CPRTYPE": {"type": "choice", "options": ["0", "1", "2", "3"]},
-    },
-    "DODSAARS": {
-        "PNR": {"type": "pnr"},
-        "C_DOD1": {"type": "string", "prefix": "A", "min": 10, "max": 99},
-        "C_DOD2": {"type": "string", "prefix": "B", "min": 10, "max": 99},
-        "C_DOD3": {"type": "string", "prefix": "C", "min": 10, "max": 99},
-        "C_DOD4": {"type": "string", "prefix": "D", "min": 10, "max": 99},
-        "C_DODSMAADE": {"type": "choice", "options": ["1", "2", "3", "4", "5"]},
-        "D_DODSDTO": {"type": "date", "start": datetime(2000, 1, 1), "end": datetime(2023, 12, 31)},
-        "CPRTJEK": {"type": "choice", "options": ["0", "1"]},
-        "CPRTYPE": {"type": "choice", "options": ["0", "1", "2", "3"]},
-    },
-    "DODSAASG": {
-        "PNR": {"type": "pnr"},
-        "C_DODTILGRUNDL_ACME": {"type": "string", "prefix": "E", "min": 10, "max": 99},
-        "C_DOD_1A": {"type": "string", "prefix": "F", "min": 10, "max": 99},
-        "C_DOD_1B": {"type": "string", "prefix": "G", "min": 10, "max": 99},
-        "C_DOD_1C": {"type": "string", "prefix": "H", "min": 10, "max": 99},
-        "C_DOD_1D": {"type": "string", "prefix": "I", "min": 10, "max": 99},
-        "D_DODSDATO": {
-            "type": "date",
-            "start": datetime(2000, 1, 1),
-            "end": datetime(2023, 12, 31),
-        },
-        "C_BOPKOMF07": {"type": "int", "min": 101, "max": 851},
-    },
-    "VNDS": {
-        "PNR": {"type": "pnr"},
-        "HAEND_DATO": {
-            "type": "date",
-            "start": datetime(2000, 1, 1),
-            "end": datetime(2023, 12, 31),
-        },
-        "INDUD_KODE": {"type": "choice", "options": ["10", "20", "30", "40", "50"]},
-        "CPRTJEK": {"type": "choice", "options": ["0", "1"]},
-        "CPRTYPE": {"type": "choice", "options": ["0", "1", "2", "3"]},
-    },
-    "AKM": {
-        "PNR": {"type": "pnr"},
-        "SENR": {"type": "int", "min": 10000000, "max": 99999999},
-        "SOCIO": {"type": "choice", "options": ["110", "120", "210", "220", "310", "320", "330"]},
-        "SOCIO02": {"type": "choice", "options": ["110", "120", "210", "220", "310", "320", "330"]},
-        "SOCIO13": {"type": "choice", "options": ["110", "120", "210", "220", "310", "320", "330"]},
-        "CPRTJEK": {"type": "choice", "options": ["0", "1"]},
-        "CPRTYPE": {"type": "choice", "options": ["0", "1", "2", "3"]},
-        "VERSION": {"type": "choice", "options": ["1", "2"]},
-    },
-    "FAIK": {
-        "FAMILIE_ID": {"type": "string", "prefix": "F", "min": 100000, "max": 999999},
-        "FAMAEKVIVADISP": {"type": "float", "mean": 300000, "std": 50000},
-        "FAMAEKVIVADISP_13": {"type": "float", "mean": 320000, "std": 55000},
-        "FAMBOLIGFORM": {"type": "choice", "options": ["1", "2", "3", "4", "5"]},
-        "FAMDISPONIBEL": {"type": "float", "mean": 400000, "std": 70000},
-        "FAMDISPONIBEL_13": {"type": "float", "mean": 420000, "std": 75000},
-        "FAMERHVERVSINDK": {"type": "float", "mean": 450000, "std": 80000},
-        "FAMERHVERVSINDK_13": {"type": "float", "mean": 470000, "std": 85000},
-        "FAMINDKOMSTIALT": {"type": "float", "mean": 500000, "std": 90000},
-        "FAMINDKOMSTIALT_13": {"type": "float", "mean": 520000, "std": 95000},
-        "FAMSKATPLIGTINDK": {"type": "float", "mean": 480000, "std": 85000},
-        "FAMSOCIOGRUP": {
-            "type": "choice",
-            "options": ["110", "120", "210", "220", "310", "320", "330"],
-        },
-        "FAMSOCIOGRUP_13": {
-            "type": "choice",
-            "options": ["110", "120", "210", "220", "310", "320", "330"],
-        },
-        "VERSION": {"type": "choice", "options": ["1", "2"]},
-    },
-    "IDAN": {
-        "PNR": {"type": "pnr"},
-        "ARBGNR": {"type": "int", "min": 1000000, "max": 9999999},
-        "ARBNR": {"type": "int", "min": 1000, "max": 9999},
-        "CVRNR": {"type": "int", "min": 10000000, "max": 99999999},
-        "JOBKAT": {"type": "choice", "options": ["1", "2", "3", "4", "5"]},
-        "JOBLON": {"type": "float", "mean": 400000, "std": 100000},
-        "LBNR": {"type": "int", "min": 1, "max": 999},
-        "STILL": {"type": "choice", "options": ["1110", "2310", "3320", "4120", "5230"]},
-        "TILKNYT": {"type": "choice", "options": ["1", "2", "3"]},
-        "CPRTJEK": {"type": "choice", "options": ["0", "1"]},
-        "CPRTYPE": {"type": "choice", "options": ["0", "1", "2", "3"]},
-    },
-    "ILME": {
-        "PNR": {"type": "pnr"},
-        "VMO_A_INDK_AM_BIDRAG_BETAL": {"type": "float", "mean": 350000, "std": 70000},
-        "VMO_A_INDK_AM_BIDRAG_FRI": {"type": "float", "mean": 20000, "std": 5000},
-        "VMO_BASIS_AAR": {
-            "type": "choice",
-            "options": [str(year) for year in range(2009, 2023)],
-        },
-        "VMO_BASIS_MAANED": {"type": "int", "min": 1, "max": 12},
-        "VMO_B_INDK_AM_BIDRAG_BETAL": {"type": "float", "mean": 50000, "std": 20000},
-        "VMO_B_INDK_AM_BIDRAG_FRI": {"type": "float", "mean": 10000, "std": 3000},
-        "VMO_INDKOMST_ART_KODE": {"type": "choice", "options": ["0110", "0210", "0320", "0410"]},
-        "VMO_INDKOMST_TYPE_KODE": {"type": "choice", "options": ["1", "2", "3", "4"]},
-        "VMO_SLUTDATO": {
-            "type": "date",
-            "start": datetime(2009, 1, 1),
-            "end": datetime(2022, 12, 31),
-        },
-        "VMO_STARTDATO": {
-            "type": "date",
-            "start": datetime(2009, 1, 1),
-            "end": datetime(2022, 12, 31),
-        },
-        "CPRTJEK": {"type": "choice", "options": ["0", "1"]},
-        "CPRTYPE": {"type": "choice", "options": ["0", "1", "2", "3"]},
-    },
-    "RAS": {
-        "PNR": {"type": "pnr"},
-        "ARBGNR": {"type": "int", "min": 1000000, "max": 9999999},
-        "ARBNR": {"type": "int", "min": 1000, "max": 9999},
-        "CVRNR": {"type": "int", "min": 10000000, "max": 99999999},
-        "OK_NR": {"type": "int", "min": 100000, "max": 999999},
-        "SENR": {"type": "int", "min": 10000000, "max": 99999999},
-        "SOCSTIL_KODE": {
-            "type": "choice",
-            "options": ["110", "120", "130", "210", "220", "310", "320", "330"],
-        },
-        "SOC_STATUS_KODE": {"type": "choice", "options": ["1", "2", "3", "4", "5"]},
-        "CPRTJEK": {"type": "choice", "options": ["0", "1"]},
-        "CPRTYPE": {"type": "choice", "options": ["0", "1", "2", "3"]},
-        "VERSION": {"type": "choice", "options": ["1", "2"]},
-    },
-    "SGDP": {
-        "PNR": {"type": "pnr"},
-        "ANTDAGE": {"type": "int", "min": 1, "max": 366},
-        "ARBGHP": {"type": "float", "mean": 50000, "std": 10000},
-        "ARBGIVNR": {"type": "int", "min": 1000000, "max": 9999999},
-        "BERDAGE": {"type": "int", "min": 1, "max": 366},
-        "FOERBER": {"type": "date", "start": datetime(2020, 1, 1), "end": datetime(2023, 12, 31)},
-        "FOERFRAV": {"type": "date", "start": datetime(2020, 1, 1), "end": datetime(2023, 12, 31)},
-        "FRAVDAGE": {"type": "int", "min": 1, "max": 366},
-        "NEDDPPCT": {"type": "choice", "options": [25, 50, 75, 100]},
-        "NEDTIM": {"type": "int", "min": 1, "max": 40},
-        "OPHOERSAA": {"type": "choice", "options": ["1", "2", "3", "4", "5"]},
-        "SAGSART": {"type": "choice", "options": ["1", "2", "3", "4", "5"]},
-        "SIDBER": {"type": "date", "start": datetime(2020, 1, 1), "end": datetime(2023, 12, 31)},
-        "SIKRHP": {"type": "float", "mean": 30000, "std": 5000},
-        "STARTSAG": {"type": "choice", "options": ["1", "2", "3", "4", "5"]},
-        "CPRTJEK": {"type": "choice", "options": ["0", "1"]},
-        "CPRTYPE": {"type": "choice", "options": ["0", "1", "2", "3"]},
-        "VERSION": {"type": "choice", "options": ["1", "2"]},
-    },
-    "LMDB": {
-        "PNR12": {"type": "pnr"},
-        "APK": {"type": "int", "min": 1, "max": 10},
-        "ATC": {"type": "string", "prefix": "A", "min": 10, "max": 99},
-        "DOSO": {"type": "choice", "options": ["1", "2", "3", "4"]},
-        "EKSD": {"type": "date", "start": datetime(2000, 1, 1), "end": datetime(2023, 12, 31)},
-        "INDO": {"type": "choice", "options": ["A", "B", "C", "D"]},
-        "NAME": {"type": "string", "prefix": "DRUG_", "min": 0, "max": 999},
-        "PACKSIZE": {"type": "int", "min": 10, "max": 100},
-        "VOLUME": {"type": "float", "mean": 5, "std": 2},
-        "CPRTJEK": {"type": "choice", "options": ["0", "1"]},
-        "CPRTYPE": {"type": "choice", "options": ["0", "1", "2", "3"]},
-    },
-    "LPR_DIAG": {
-        "RECNUM": {"type": "int", "min": 1000000, "max": 9999999},
-        "C_DIAG": {"type": "string", "prefix": "D", "min": 10, "max": 99},
-        "C_DIAGTYPE": {"type": "choice", "options": ["A", "B", "H"]},
-        "C_TILDIAG": {"type": "string", "prefix": "T", "min": 10, "max": 99},
-        "VERSION": {"type": "choice", "options": ["1", "2"]},
-    },
-    "LPR_SKSOPR": {
-        "RECNUM": {"type": "int", "min": 1000000, "max": 9999999},
-        "C_OPR": {"type": "string", "prefix": "O", "min": 10000, "max": 99999},
-        "C_OPRART": {"type": "choice", "options": ["A", "B", "C"]},
-        "C_TILOPR": {"type": "string", "prefix": "T", "min": 10, "max": 99},
-        "D_ODTO": {"type": "date", "start": datetime(2000, 1, 1), "end": datetime(2023, 12, 31)},
-        "VERSION": {"type": "choice", "options": ["1", "2"]},
-    },
-    "UDFK": {
-        "PNR": {"type": "pnr"},
-        "FAGKODE": {"type": "string", "prefix": "FAG", "min": 1000, "max": 9999},
-        "KLASSETYPE": {"type": "choice", "options": ["A", "B", "C"]},
-        "KLTRIN": {"type": "choice", "options": ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]},
-        "SKOLEAAR": {"type": "choice", "options": ["2022/2023"]},
-        "GRUNDSKOLEKARAKTER": {
-            "type": "choice",
-            "options": ["-3", "00", "02", "4", "7", "10", "12"],
-        },
-        "CPRTJEK": {"type": "choice", "options": ["0", "1"]},
-        "CPRTYPE": {"type": "choice", "options": ["0", "1", "2", "3"]},
-        "BEDOEMMELSESFORM": {"type": "choice", "options": ["1", "2", "3"]},
-        "FAGDISCIPLIN": {"type": "string", "prefix": "FD", "min": 10, "max": 99},
-        "GRUNDSKOLEFAG": {"type": "choice", "options": ["DAN", "MAT", "ENG", "FYS", "KEM"]},
-        "GRUNDSKOLENIVEAU": {"type": "choice", "options": ["A", "B", "C", "D"]},
-        "INSTNR": {"type": "int", "min": 100000, "max": 999999},
-        "KARAKTERAARSAG": {"type": "choice", "options": ["1", "2", "3", "4"]},
-        "KL_BETEGNELSE": {"type": "string", "prefix": "KL", "min": 10, "max": 99},
-        "PROEVEART": {"type": "choice", "options": ["1", "2", "3"]},
-        "PROEVEFORM": {"type": "choice", "options": ["A", "B", "C"]},
-        "SKALA": {"type": "choice", "options": ["7", "13"]},
-    },
-    "LPR_ADM": {
-        "PNR": {"type": "pnr"},
-        "RECNUM": {"type": "int", "min": 1000000, "max": 9999999},
-        "C_ADIAG": {"type": "string", "prefix": "D", "min": 10, "max": 99},
-        "C_AFD": {"type": "int", "min": 1000, "max": 9999},
-        "C_PATTYPE": {"type": "choice", "options": ["0", "1", "2"]},
-        "C_SGH": {"type": "int", "min": 1000, "max": 9999},
-        "C_SPEC": {"type": "int", "min": 10, "max": 99},
-        "D_INDDTO": {"type": "date", "start": datetime(2000, 1, 1), "end": datetime(2019, 12, 31)},
-        "D_UDDTO": {"type": "date", "start": datetime(2000, 1, 1), "end": datetime(2019, 12, 31)},
-        "V_SENGDAGE": {"type": "int", "min": 1, "max": 30},
-        "CPRTJEK": {"type": "choice", "options": ["0", "1"]},
-        "CPRTYPE": {"type": "choice", "options": ["0", "1", "2", "3"]},
-        "VERSION": {"type": "choice", "options": ["1", "2"]},
-        "C_KONTAARS": {"type": "choice", "options": ["1", "2", "3", "4", "5"]},
-        "C_HAFD": {"type": "int", "min": 1000, "max": 9999},
-        "C_HENM": {"type": "choice", "options": ["1", "2", "3"]},
-        "C_HSGH": {"type": "int", "min": 1000, "max": 9999},
-        "C_INDM": {"type": "choice", "options": ["1", "2", "3"]},
-        "C_KOM": {"type": "int", "min": 101, "max": 851},
-        "C_UDM": {"type": "choice", "options": ["1", "2", "3", "4"]},
-        "D_HENDTO": {"type": "date", "start": datetime(2000, 1, 1), "end": datetime(2019, 12, 31)},
-        "K_AFD": {"type": "int", "min": 1000, "max": 9999},
-        "V_ALDDG": {"type": "int", "min": 0, "max": 36500},
-        "V_ALDER": {"type": "int", "min": 0, "max": 100},
-    },
-    "MFR": {
-        "CPR_BARN": {"type": "pnr"},
-        "CPR_MODER": {"type": "pnr"},
-        "CPR_FADER": {"type": "pnr"},
-        "FOEDSELSDATO": {
-            "type": "date",
-            "start": datetime(2000, 1, 1),
-            "end": datetime(2018, 12, 31),
-        },
-        "GESTATIONSALDER_DAGE": {"type": "int", "min": 140, "max": 310},
-        "GESTATIONSALDER_BARN": {"type": "int", "min": 20, "max": 45},  # Added this line
-        "KOEN_BARN": {"type": "choice", "options": ["1", "2"]},
-        "LAENGDE_BARN": {"type": "float", "mean": 50, "std": 3},
-        "VAEGT_BARN": {"type": "float", "mean": 3500, "std": 500},
-        "APGARSCORE_EFTER5MINUTTER": {"type": "int", "min": 0, "max": 10},
-        "FLERFOLDSGRAVIDITET": {"type": "choice", "options": ["1", "2", "3", "4"]},
-        "PK_MFR": {"type": "string", "prefix": "MFR", "min": 100000, "max": 999999},
-        "FAMILIE_ID": {
-            "type": "string",
-            "prefix": "F",
-            "min": 100000,
-            "max": 999999,
-        },  # Added this line
-    },
-    "IND": {
-        "PNR": {"type": "pnr"},
-        "BESKST13": {
-            "type": "choice",
-            "options": ["110", "120", "130", "210", "220", "310", "320", "330"],
-        },
-        "LOENMV_13": {"type": "float", "mean": 400000, "std": 100000},
-        "PERINDKIALT_13": {"type": "float", "mean": 450000, "std": 120000},
-        "ERHVERVSINDK_13": {"type": "float", "mean": 380000, "std": 90000},  # Added this line
-        "PRE_SOCIO": {
-            "type": "choice",
-            "options": ["110", "120", "210", "220", "310", "320", "330"],
-        },
-        "CPRTJEK": {"type": "choice", "options": ["0", "1"]},
-        "CPRTYPE": {"type": "choice", "options": ["0", "1", "2", "3"]},
-        "VERSION": {"type": "choice", "options": ["1", "2"]},
-    },
-    "UDDF": {
-        "PNR": {"type": "pnr"},
-        "HFAUDD": {"type": "choice", "options": ["10", "20", "30", "35", "40", "50", "60", "70"]},
-        "HF_KILDE": {"type": "choice", "options": ["UDD", "KVA", "GRU", "IVU"]},
-        "HF_VFRA": {"type": "date", "start": datetime(1980, 1, 1), "end": datetime(2022, 12, 31)},
-        "HF_VTIL": {
-            "type": "date",
-            "start": datetime(1980, 1, 1),
-            "end": datetime(2030, 12, 31),
-        },  # Added this line
-        "INSTNR": {"type": "int", "min": 100000, "max": 999999},
-        "CPRTJEK": {"type": "choice", "options": ["0", "1"]},
-        "CPRTYPE": {"type": "choice", "options": ["0", "1", "2", "3"]},
-        "VERSION": {"type": "choice", "options": ["1", "2"]},
-    },
-}
+def generate_data(config, num_records, year, parent_birth_years=None):
+    data = {}
+    for col, col_config in config.items():
+        data[col] = generate_column_data(col, col_config, num_records, year, parent_birth_years)
 
-# Define the periods for each register
-register_periods = {
-    "BEF": list(range(2000, 2024)),  # 2000-2023
-    "AKM": list(range(2000, 2023)),  # 2000-2022
-    "FAIK": list(range(2000, 2022)),  # 2000-2021
-    "IDAN": list(range(2000, 2022)),  # 2000-2021
-    "ILME": list(range(2009, 2023)),  # 2009-2022
-    "IND": list(range(2001, 2023)),  # 2001-2022
-    "RAS": list(range(2000, 2022)),  # 2000-2021
-    "LMDB": list(range(2000, 2024)),  # 2000-2023
-    "LPR_ADM": list(range(2000, 2020)),  # 2000-2019
-    "LPR_DIAG": list(range(2000, 2019)),  # 2000-2018
-    "LPR_SKSOPR": list(range(2000, 2019)),  # 2000-2018
-    "MFR": list(range(2000, 2019)),  # 2000-2018
-    "DOD": list(range(2000, 2023)),  # 2000-2022
-    "DODSAARS": list(range(2000, 2002)),  # 2000-2001
-    "DODSAASG": list(range(2000, 2022)),  # 2000-2021
-    "UDDF": [2022],  # Only 2022
-    "UDFK": [2023],  # Only 2023
-    "VNDS": [2022],  # Only 2022
-    "SGDP": list(range(2000, 2020)),  # 2000-2019
-}
+    # Add FAMILIE_ID if not present
+    if "FAMILIE_ID" not in data:
+        if "PNR" in data and "ALDER" in data and "CIVST" in data:
+            data["FAMILIE_ID"] = pl.Series(
+                [
+                    get_or_create_familie_id(data["PNR"][i], data["ALDER"][i], data["CIVST"][i])
+                    for i in range(num_records)
+                ]
+            ).cast(pl.Utf8)
+        else:
+            data["FAMILIE_ID"] = pl.Series(
+                [generate_familie_id() for _ in range(num_records)]
+            ).cast(pl.Utf8)
+
+    df = pl.DataFrame(data)
+    if df.is_empty():
+        return pl.DataFrame({col: [] for col in config.keys()})
+    return df
 
 
-def data_exists(file_path):
-    return os.path.exists(file_path)
+def generate_column_data(col, col_config, num_records, year, parent_birth_years):
+    if col == "FOED_DAG" and parent_birth_years is not None:
+        return generate_birth_dates(num_records, year)
+    elif col == "HFAUDD" and parent_birth_years is not None:
+        return generate_education_levels(parent_birth_years, year, num_records)
+    elif col == "HF_VFRA" and parent_birth_years is not None:
+        return generate_education_dates(parent_birth_years, year, num_records)
+    elif col_config["type"] == "choice":
+        return generate_choice_data(col_config, num_records)
+    elif col_config["type"] == "int":
+        return generate_int_data(col_config, num_records)
+    elif col_config["type"] == "float":
+        return generate_float_data(col_config, num_records)
+    elif col_config["type"] == "date":
+        return generate_date_data(col_config, num_records, year)
+    elif col_config["type"] == "pnr":
+        return generate_pnr_data(col_config, num_records, year)
+    elif col_config["type"] == "string":
+        return generate_string_data(col_config, num_records)
+    else:
+        raise ValueError(f"Unknown column type for {col}: {col_config['type']}")
+
+
+def generate_birth_dates(num_records, year):
+    return pl.Series(
+        [
+            datetime(year - np.random.randint(0, 5), 1, 1)
+            + timedelta(days=np.random.randint(0, 365))
+            for _ in range(num_records)
+        ]
+    ).cast(pl.Date)
+
+
+def generate_education_levels(parent_birth_years, year, num_records):
+    return pl.Series(
+        [
+            generate_education_level(parent_birth_year, year)
+            for parent_birth_year in parent_birth_years[:num_records]
+        ]
+    ).cast(pl.Utf8)
+
+
+def generate_education_dates(parent_birth_years, year, num_records):
+    return pl.Series(
+        [
+            generate_education_date(parent_birth_year, year)
+            for parent_birth_year in parent_birth_years[:num_records]
+        ]
+    ).cast(pl.Date)
+
+
+def generate_choice_data(col_config, num_records):
+    return pl.Series(np.random.choice(col_config["options"], num_records)).cast(pl.Utf8)
+
+
+def generate_int_data(col_config, num_records):
+    return pl.Series(np.random.randint(col_config["min"], col_config["max"], num_records)).cast(
+        pl.Int64
+    )
+
+
+def generate_float_data(col_config, num_records):
+    return pl.Series(np.random.normal(col_config["mean"], col_config["std"], num_records)).cast(
+        pl.Float64
+    )
+
+
+def generate_date_data(col_config, num_records, year):
+    start = max(col_config["start"], datetime(year, 1, 1))
+    end = min(col_config["end"], datetime(year, 12, 31))
+    if start >= end:
+        return pl.Series([start] * num_records).cast(pl.Date)
+    else:
+        return pl.Series(
+            [
+                start + timedelta(seconds=np.random.randint(0, int((end - start).total_seconds())))
+                for _ in range(num_records)
+            ]
+        ).cast(pl.Date)
+
+
+def generate_pnr_data(col_config, num_records, year):
+    return pl.Series(
+        [
+            get_or_create_pnr(
+                datetime(year - np.random.randint(0, 100), 1, 1), np.random.choice(["M", "K"])
+            )
+            for _ in range(num_records)
+        ]
+    ).cast(pl.Utf8)
+
+
+def generate_string_data(col_config, num_records):
+    return pl.Series(
+        [
+            f"{col_config['prefix']}{np.random.randint(col_config['min'], col_config['max'])}"
+            for _ in range(num_records)
+        ]
+    ).cast(pl.Utf8)
+
+
+def generate_education_level(birth_year, current_year):
+    age = current_year - birth_year
+    if age < MINIMUM_EDUCATION_AGE:
+        return "10"  # Basic school
+    elif age < EARLY_EDUCATION_AGE:
+        return np.random.choice(["10", "20", "30"], p=[0.3, 0.5, 0.2])
+    elif age < YOUNG_ADULT_AGE:
+        return np.random.choice(["20", "30", "35", "40"], p=[0.3, 0.3, 0.2, 0.2])
+    else:
+        return np.random.choice(
+            ["20", "30", "35", "40", "50", "60", "70"], p=[0.1, 0.2, 0.2, 0.2, 0.15, 0.1, 0.05]
+        )
+
+
+def generate_education_date(birth_year, current_year):
+    education_level = generate_education_level(birth_year, current_year)
+    if education_level == "10":
+        edu_year = birth_year + 16
+    elif education_level in ["20", "30"]:
+        edu_year = birth_year + np.random.randint(18, 22)
+    elif education_level in ["35", "40"]:
+        edu_year = birth_year + np.random.randint(21, 26)
+    else:
+        edu_year = birth_year + np.random.randint(24, 30)
+    return datetime(min(edu_year, current_year), 1, 1) + timedelta(days=np.random.randint(0, 365))
+
+
+def get_or_create_pnr(birth_date, gender):
+    key = (birth_date, gender)
+    if key not in PNR_CACHE:
+        PNR_CACHE[key] = generate_pnr(birth_date, gender)
+    return PNR_CACHE[key]
+
+
+def generate_pnr(birth_date, gender):
+    day = birth_date.day
+    month = birth_date.month
+    year = birth_date.year % 100
+    century = birth_date.year // 100
+
+    if century == CENTURY_18:
+        seventh_digit = np.random.randint(5, 8)
+    elif century == CENTURY_19:
+        if birth_date.year < YEAR_1937:
+            seventh_digit = np.random.randint(0, 4)
+        else:
+            seventh_digit = np.random.randint(4, 10)
+    elif century == CENTURY_20:
+        seventh_digit = np.random.randint(0, 4)
+    else:  # 21st century
+        seventh_digit = np.random.randint(4, 10)
+
+    last_three_digits = np.random.randint(0, 999)
+    last_digit = (
+        last_three_digits
+        if (gender == "K" and last_three_digits % 2 == 0)
+        or (gender == "M" and last_three_digits % 2 == 1)
+        else last_three_digits + 1
+    )
+
+    return f"{day:02d}{month:02d}{year:02d}-{seventh_digit}{last_digit:03d}"
+
+
+def generate_familie_id(pnr=None, age=None, marital_status=None):
+    if age is not None and marital_status is not None:
+        if age >= MINIMUM_ADULT_AGE and marital_status in ["G", "P"]:  # Married or Partnership
+            new_id = f"F{np.random.randint(1000000, 9999999):07d}"
+            if pnr:
+                FAMILIE_ID_CACHE[pnr] = new_id
+            return new_id
+        elif age < MINIMUM_ADULT_AGE or (age < YOUNG_ADULT_AGE and marital_status == "U"):
+            return None  # Will be filled later with parents' FAMILIE_ID
+
+    return f"F{np.random.randint(1000000, 9999999):07d}"
+
+
+def get_or_create_familie_id(pnr, age, marital_status):
+    if pnr not in FAMILIE_ID_CACHE:
+        if age < YOUNG_ADULT_AGE and marital_status == "U":  # Unmarried and under 25
+            # 80% chance to be part of parents' family
+            if np.random.random() < PROB:
+                FAMILIE_ID_CACHE[pnr] = None  # Will be filled later with parents' FAMILIE_ID
+            else:
+                FAMILIE_ID_CACHE[pnr] = generate_familie_id(pnr, age, marital_status)
+        else:
+            FAMILIE_ID_CACHE[pnr] = generate_familie_id(pnr, age, marital_status)
+    return FAMILIE_ID_CACHE[pnr]
+
+
+def update_familie_id(pnr, year, new_familie_id):
+    if pnr not in FAMILIE_ID_HISTORY:
+        FAMILIE_ID_HISTORY[pnr] = {}
+    FAMILIE_ID_HISTORY[pnr][year] = new_familie_id
+
+
+def get_familie_id(pnr, year):
+    if pnr in FAMILIE_ID_HISTORY:
+        return max((y, id) for y, id in FAMILIE_ID_HISTORY[pnr].items() if y <= year)[1]
+    return None
+
+
+def handle_family_change(pnr, year, event_type):
+    if event_type in ["divorce", "death"]:
+        new_familie_id = generate_familie_id(pnr, get_age(pnr, year), "U")
+        update_familie_id(pnr, year, new_familie_id)
+    elif event_type == "child_moving_out":
+        if get_age(pnr, year) >= MINIMUM_ADULT_AGE:
+            new_familie_id = generate_familie_id(pnr, get_age(pnr, year), "U")
+            update_familie_id(pnr, year, new_familie_id)
+
+
+def generate_shared_recnum(num_records):
+    recnums = set()
+    while len(recnums) < num_records:
+        recnums.add(np.random.randint(1000000, 9999999))
+    return pl.Series(list(recnums)).cast(pl.Int64)
+
+
+def get_age(pnr, year):
+    birth_year = int(pnr[4:6])
+    birth_year += 1900 if birth_year >= 00 else 2000
+    return year - birth_year
+
+
+def generate_consistent_data(register_configs, num_records, year):
+    # Generate BEF data first as it's the main demographic register
+    bef_data = generate_data(register_configs["BEF"], num_records, year)
+    if bef_data is None or bef_data.is_empty():
+        print("Failed to generate BEF data. Aborting.")
+        return {}
+
+    # Generate parent birth years
+    parent_birth_years = [
+        year - np.random.randint(MINIMUM_PARENT_AGE, MAXIMUM_PARENT_AGE) for _ in range(num_records)
+    ]
+
+    # Use BEF data to generate consistent data for other registers
+    data = {"BEF": bef_data}
+
+    # Generate data for registers that require RECNUM
+    recnum_registers = ["LPR_DIAG", "LPR_SKSOPR", "LPR_ADM"]
+    shared_recnum = generate_shared_recnum(num_records)
+    for register in recnum_registers:
+        if register in register_configs:
+            config = register_configs[register]
+            register_data = generate_data(config, num_records, year)
+            if register_data is not None and not register_data.is_empty():
+                register_data = register_data.with_columns(
+                    shared_recnum[: len(register_data)].alias("RECNUM")
+                )
+                data[register] = register_data
+
+    # Generate data for other registers
+    for register, config in register_configs.items():
+        if register not in ["BEF"] + recnum_registers:
+            if register == "UDDF":
+                # Generate UDDF data for all individuals in BEF
+                uddf_data = generate_data(
+                    config, len(bef_data), year, parent_birth_years=parent_birth_years
+                )
+                if uddf_data is not None and not uddf_data.is_empty():
+                    uddf_data = uddf_data.with_columns(bef_data["PNR"])
+                    uddf_data = uddf_data.with_columns(
+                        [
+                            pl.when(pl.col("HF_VFRA") > pl.col("HF_VTIL"))
+                            .then(pl.col("HF_VTIL"))
+                            .otherwise(pl.col("HF_VFRA"))
+                            .alias("HF_VFRA")
+                        ]
+                    )
+                    data[register] = uddf_data
+            else:
+                register_data = generate_data(config, num_records, year)
+                if register_data is not None and not register_data.is_empty():
+                    if "PNR" in register_data.columns:
+                        bef_pnrs = bef_data["PNR"].sample(
+                            n=len(register_data), with_replacement=True
+                        )
+                        register_data = register_data.with_columns(bef_pnrs.alias("PNR"))
+                    if "FAMILIE_ID" in register_data.columns:
+                        bef_familie_ids = bef_data["FAMILIE_ID"].sample(
+                            n=len(register_data), with_replacement=True
+                        )
+                        register_data = register_data.with_columns(
+                            bef_familie_ids.alias("FAMILIE_ID")
+                        )
+                    data[register] = register_data
+
+    return data
 
 
 def main():
@@ -397,46 +512,50 @@ def main():
     parser.add_argument("--years", nargs="+", type=int, help="Specific years to process")
     args = parser.parse_args()
 
-    base_dir = "synth_data"
+    base_dir = "data/generated"
     os.makedirs(base_dir, exist_ok=True)
 
     registers_to_process = args.registers if args.registers else register_configs.keys()
 
-    for register in registers_to_process:
-        if register not in register_configs:
-            logger.warning(f"Configuration for register '{register}' not found. Skipping.")
-            continue
+    for year in args.years if args.years else range(2000, 2024):
+        logger.info(f"Generating data for year {year}")
 
-        config = register_configs[register]
-        register_dir = os.path.join(base_dir, register.lower())
-        os.makedirs(register_dir, exist_ok=True)
+        num_records = 1000  # Adjust as needed
+        year_data = generate_consistent_data(register_configs, num_records, year)
 
-        periods = register_periods.get(register, [2022])  # Default to 2022 if not specified
-        years_to_process = args.years if args.years else periods
+        for register in registers_to_process:
+            if register not in register_configs:
+                logger.warning(f"Configuration for register '{register}' not found. Skipping.")
+                continue
 
-        for year in years_to_process:
-            if year not in periods:
-                logger.warning(
-                    f"Year {year} is not in the specified periods for register '{register}'. Skipping."
+            if year not in register_periods.get(register, [year]):
+                logger.info(
+                    f"Skipping {register} for year {year} as it's not in the specified periods."
                 )
                 continue
+
+            register_dir = os.path.join(base_dir, register.lower())
+            os.makedirs(register_dir, exist_ok=True)
 
             file_name = f"{register.lower()}_{year}.parquet"
             file_path = os.path.join(register_dir, file_name)
 
-            if args.force or not data_exists(file_path):
-                num_records = 1000  # You can adjust this for each register and year if needed
-                year_data = generate_data(config, num_records, year)
-
+            if args.force or not os.path.exists(file_path):
                 # Save the data to a parquet file
-                year_data.write_parquet(file_path)
-
-                logger.info(f"Generated and saved {file_name}")
-
+                if (
+                    register in year_data
+                    and year_data[register] is not None
+                    and not year_data[register].is_empty()
+                ):
+                    try:
+                        year_data[register].write_parquet(file_path)
+                        logger.info(f"Generated and saved {file_name}")
+                    except Exception as e:
+                        logger.error(f"Failed to write {file_name}. Error: {e!s}")
+                else:
+                    logger.warning(f"No data generated for {register} {year}. Skipping.")
             else:
                 logger.info(f"Data for {register} {year} already exists. Skipping.")
-
-        logger.info(f"Completed processing for {register}")
 
     logger.info("Data generation complete.")
 
