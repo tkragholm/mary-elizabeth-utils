@@ -1,10 +1,14 @@
 import json
 import logging
+import re
 import traceback
 from pathlib import Path
 
 import polars as pl
 import polars.selectors as cs
+import pyarrow as pa
+import pyarrow.csv as pa_csv
+import pyarrow.parquet as pq
 from dateutil.parser import ParserError
 from dateutil.parser import parse as dateutil_parse
 from rich import print as rprint
@@ -69,12 +73,54 @@ def is_categorical(series, threshold=0.1):
 
 
 def read_file(file_path: Path) -> pl.DataFrame:
-    if file_path.suffix.lower() == ".parquet":
-        return pl.read_parquet(file_path)
-    elif file_path.suffix.lower() == ".csv":
-        return pl.read_csv(file_path)
-    else:
-        raise ValueError(f"Unsupported file format: {file_path.suffix}")
+    try:
+        if file_path.suffix.lower() == ".parquet":
+            # Read Parquet file with pyarrow
+            arrow_table = pq.read_table(file_path)
+        elif file_path.suffix.lower() == ".csv":
+            # Read CSV file with pyarrow
+            read_options = pa_csv.ReadOptions(encoding="utf8")
+            parse_options = pa_csv.ParseOptions(ignore_empty_lines=True)
+            convert_options = pa_csv.ConvertOptions(
+                strings_can_be_null=True, null_values=["", "NULL", "null", "NA", "na", "NaN", "nan"]
+            )
+            arrow_table = pa_csv.read_csv(
+                file_path,
+                read_options=read_options,
+                parse_options=parse_options,
+                convert_options=convert_options,
+            )
+        else:
+            raise ValueError(f"Unsupported file format: {file_path.suffix}")
+
+        # Convert SPECIAL_VARS to strings
+        schema = arrow_table.schema
+        new_fields = []
+        for field in schema:
+            if field.name in SPECIAL_VARS:
+                new_fields.append(pa.field(field.name, pa.string()))
+            else:
+                new_fields.append(field)
+        new_schema = pa.schema(new_fields)
+
+        # Cast the table to the new schema
+        arrow_table = arrow_table.cast(new_schema)
+
+        # Convert Arrow table to Polars DataFrame
+        result = pl.from_arrow(arrow_table)
+
+        # Ensure we return a DataFrame
+        if isinstance(result, pl.DataFrame):
+            return result
+        elif isinstance(result, pl.Series):
+            return result.to_frame()
+        else:
+            raise ValueError(f"Unexpected type returned from pl.from_arrow: {type(result)}")
+
+    except Exception as e:
+        logger.error(f"Error reading file {file_path}: {e!s}")
+        logger.error(traceback.format_exc())
+        return pl.DataFrame()
 
 
 def analyze_register(file_path: Path, progress: Progress, task: TaskID):
@@ -164,22 +210,45 @@ def analyze_register(file_path: Path, progress: Progress, task: TaskID):
         return {"error": str(e), "traceback": traceback.format_exc()}
 
 
-def analyze_registers(directory: str):
+def analyze_registers(input_directory: str, output_directory: str):
     results = {}
-    files = list(Path(directory).rglob("*.parquet")) + list(Path(directory).rglob("*.csv"))
+    files = list(Path(input_directory).rglob("*.parquet")) + list(
+        Path(input_directory).rglob("*.csv")
+    )
 
     with Progress() as progress:
         task = progress.add_task("[green]Analyzing registers...", total=len(files))
 
         for file_path in files:
             try:
-                register_name = file_path.stem.split("_")[0].upper()
-                year = file_path.stem.split("_")[1]
+                # Extract register name and year from filename
+                file_stem = file_path.stem
+
+                # Try to match patterns: register_2000, register2000, or just register
+                match = re.match(r"([A-Za-z]+)(_?\d*)", file_stem)
+
+                if match:
+                    register_name = match.group(1).upper()
+                    year = match.group(2).lstrip("_")  # Remove leading underscore if present
+                else:
+                    # If no match, use the whole filename as register name
+                    register_name = file_stem.upper()
+                    year = ""
 
                 if register_name not in results:
                     results[register_name] = {}
 
-                results[register_name][year] = analyze_register(file_path, progress, task)
+                # Use 'single' as the key if there's no year
+                year_key = year if year else "single"
+                results[register_name][year_key] = analyze_register(file_path, progress, task)
+
+                # Save the dataframe as a parquet file
+                df = read_file(file_path)
+                output_filename = f"{year}.parquet" if year else f"{register_name}.parquet"
+                output_path = Path(output_directory) / "registers" / register_name / output_filename
+                output_path.parent.mkdir(parents=True, exist_ok=True)
+                df.write_parquet(output_path)
+
             except Exception as e:
                 logger.error(f"Error processing file {file_path}: {e!s}")
                 results[str(file_path)] = {"error": str(e), "traceback": traceback.format_exc()}
@@ -197,18 +266,20 @@ def save_summary(summary: dict, output_file: str):
 
 
 if __name__ == "__main__":
-    data_directory = "/Users/tobiaskragholm/dev/mary-elizabeth-utils/synth_data"
-    output_file = "register_summary.log"
+    input_directory = "/path/to/input/directory"
+    output_directory = "/path/to/output/directory"
+    summary_file = "register_summary.log"
 
     try:
         with console.status("[bold green]Analyzing registers...") as status:
-            summary = analyze_registers(data_directory)
+            summary = analyze_registers(input_directory, output_directory)
 
-        save_summary(summary, output_file)
+        save_summary(summary, summary_file)
 
         rprint("[bold green]Analysis complete!")
         rprint(f"[bold blue]Total registers analyzed: {len(summary)}")
-        rprint(f"[bold blue]Summary saved to: {output_file}")
+        rprint(f"[bold blue]Summary saved to: {summary_file}")
+        rprint(f"[bold blue]Parquet files saved to: {output_directory}/registers")
     except Exception as e:
         logger.error(f"An unexpected error occurred: {e!s}")
         logger.error(traceback.format_exc())

@@ -147,3 +147,4 @@ calculate_api_cost.py
 /data/*.tsv
 /python/mary_elizabeth_utils/bin
 release.sh
+/synth_data

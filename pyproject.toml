@@ -28,6 +28,7 @@ dependencies = [
     "pydantic",
     "rich",
     "python-dateutil",
+    "pyarrow",
 ]
 
 [project.scripts]
